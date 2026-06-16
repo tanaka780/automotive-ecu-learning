@@ -23,8 +23,56 @@
 
 | 確認観点 | 結果 |
 | --- | --- |
-| ビルド（-Wall -Wextra -std=c11） | |
-| 実行（20サンプル＋統計表示） | |
+| ビルド（-Wall -Wextra -std=c11） | 成功（警告・エラーなし） |
+| 実行（20サンプル＋統計表示） | 成功 |
+
+```
+[Sample 01]
+Speed:  73 km/h | RPM: 2753 | Temp:  73 C
+[Sample 02]
+Speed:  68 km/h | RPM: 4501 | Temp:  95 C
+[Sample 03]
+Speed:  57 km/h | RPM: 2883 | Temp:  51 C
+[Sample 04]
+Speed: 113 km/h | RPM: 2236 | Temp:  94 C
+[Sample 05]
+Speed:  12 km/h | RPM: 5717 | Temp:  56 C
+[Sample 06]
+Speed: 102 km/h | RPM: 1009 | Temp:  50 C
+[Sample 07]
+Speed:  25 km/h | RPM: 3761 | Temp:  32 C
+[Sample 08]
+Speed:  60 km/h | RPM: 2442 | Temp:  97 C
+[Sample 09]
+Speed:  22 km/h | RPM: 2963 | Temp:  98 C
+[Sample 10]
+Speed:  76 km/h | RPM: 4910 | Temp:  52 C
+[Sample 11]
+Speed:  76 km/h | RPM: 5584 | Temp:  66 C
+[Sample 12]
+Speed:  60 km/h | RPM: 2437 | Temp:  50 C
+[Sample 13]
+Speed:  97 km/h | RPM: 5922 | Temp:  95 C
+[Sample 14]
+Speed:  62 km/h | RPM: 4623 | Temp:  52 C
+[Sample 15]
+Speed:  28 km/h | RPM: 5818 | Temp:  68 C
+[Sample 16]
+Speed:  96 km/h | RPM: 5862 | Temp:  84 C
+[Sample 17]
+Speed:  74 km/h | RPM: 5239 | Temp:  37 C
+[Sample 18]
+Speed: 109 km/h | RPM: 2444 | Temp:  89 C
+[Sample 19]
+Speed: 113 km/h | RPM: 3152 | Temp: 100 C
+[Sample 20]
+Speed:  92 km/h | RPM: 2585 | Temp:  37 C
+
+--- Stats (20 samples) ---
+Speed: min= 12  max=113  avg= 70 km/h
+RPM  : min=1009  max=5922  avg=3842
+Temp : min= 32  max=100  avg= 68 C
+```
 
 ---
 
