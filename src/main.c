@@ -4,6 +4,7 @@
 #include <unistd.h>   /* sleep() */
 #include "sensor.h"
 #include "stats.h"
+#include "alert.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -40,6 +41,7 @@ int main(void) {
         printf("[Sample %02d]\n", i);
         sensor_update(&sensor_data);         /* センサ値を更新する (書く) */
         sensor_print(&sensor_data);          /* センサ値を表示する (読む) */
+        alert_check(&sensor_data);           /* 閾値チェック・警告表示 (読む) */
         stats_update(&stats, &sensor_data);  /* 統計データを更新する */
         sleep(1);                            /* 1秒待つ */
     }
