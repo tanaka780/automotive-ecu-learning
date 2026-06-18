@@ -7,7 +7,7 @@
 ## 現在の状態
 
 - Phase: Phase1
-- 実装済み: センサシミュレーション基本実装、統計モジュール、アラートモジュール
+- 実装済み: センサシミュレーション基本実装、統計モジュール、アラートモジュール、センサ状態モジュール
 
 ---
 
@@ -19,4 +19,5 @@
 | `sensor.c` | `VehicleSensorData` | — | センサ値の更新・表示 |
 | `stats.c` | `VehicleStats` | `VehicleSensorData`（読むのみ） | 統計値の更新・表示 |
 | `alert.c` | —（書き込みなし） | `VehicleSensorData`（読むのみ） | 閾値チェック・警告表示 |
+| `status.c` | `SensorStatus` | `VehicleSensorData`（読むのみ） | センサ値の状態分類（NORMAL / WARNING / CRITICAL）と表示 |
 

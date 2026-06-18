@@ -5,6 +5,7 @@
 #include "sensor.h"
 #include "stats.h"
 #include "alert.h"
+#include "status.h"   /* センサ状態分類モジュール (NORMAL / WARNING / CRITICAL) */
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -33,17 +34,25 @@ int main(void) {
     stats_init(&stats);
 
     /*
+     * SensorStatus: 各サンプルの状態レベルを格納する変数
+     * status_check を呼ぶたびに上書きされるため、初期化は不要
+     */
+    SensorStatus sensor_status;
+
+    /*
      * メインループ: 1秒ごとにセンサ値を更新・表示する
      * main.c は「何を・どの順番で呼ぶか」だけを管理する
      * 各処理の中身は対応するモジュール (.c ファイル) に書く
      */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
         printf("[Sample %02d]\n", i);
-        sensor_update(&sensor_data);         /* センサ値を更新する (書く) */
-        sensor_print(&sensor_data);          /* センサ値を表示する (読む) */
-        alert_check(&sensor_data);           /* 閾値チェック・警告表示 (読む) */
-        stats_update(&stats, &sensor_data);  /* 統計データを更新する */
-        sleep(1);                            /* 1秒待つ */
+        sensor_update(&sensor_data);                  /* センサ値を更新する (書く) */
+        sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
+        status_check(&sensor_status, &sensor_data);   /* 状態レベルを判定する */
+        status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
+        alert_check(&sensor_data);                    /* 閾値超過の警告を表示する (読む) */
+        stats_update(&stats, &sensor_data);           /* 統計データを更新する */
+        sleep(1);                                     /* 1秒待つ */
     }
 
     /* 全サンプルの統計結果を表示する */

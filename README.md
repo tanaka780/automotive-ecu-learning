@@ -44,6 +44,7 @@ make clean && make && make run
 | センサシミュレーション | 車速・RPM・水温をランダム更新・表示 |
 | 統計表示 | 20サンプル分の最小・最大・平均を表示 |
 | アラート表示 | 閾値を超えたセンサ値を警告表示 |
+| センサ状態表示 | NORMAL / WARNING / CRITICAL の3段階で状態を分類・表示 |
 
 ---
 
@@ -55,6 +56,7 @@ make clean && make && make run
 | `sensor.c` | センサ値の更新・表示 |
 | `stats.c` | 統計値の更新・表示 |
 | `alert.c` | 閾値チェック・警告表示 |
+| `status.c` | センサ値の状態分類（NORMAL / WARNING / CRITICAL）と表示 |
 
 ---
 
