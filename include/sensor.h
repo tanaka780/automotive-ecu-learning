@@ -2,30 +2,19 @@
 #ifndef SENSOR_H
 #define SENSOR_H
 
-/*
- * struct: 関連するデータをひとまとめにする型
- * speed / rpm / temperature をバラバラの変数で持つより、
- * 1つの型としてまとめることで関数に渡しやすくなる
- *
- * typedef: 「struct VehicleSensorData」と毎回書かずに
- * 「VehicleSensorData」だけで使えるようにする
- */
+#include <stdint.h>  /* uint8_t / uint16_t などの固定幅整数型 */
+
 typedef struct {
-    int speed;        /* 車速 [km/h] */
-    int rpm;          /* エンジン回転数 [rpm] */
-    int temperature;  /* 水温 [℃] */
+    uint8_t  speed;        /* 車速 [km/h]: 0〜120（停車〜一般道上限相当） */
+    uint16_t rpm;          /* エンジン回転数 [rpm]: 0〜6000（アイドリング〜レッドライン） */
+    uint8_t  temperature;  /* 水温 [℃]: 25〜100（常温〜冷却水沸点） */
 } VehicleSensorData;
 
-/*
- * 関数宣言 (プロトタイプ宣言):
- * .h に書くことで、他の .c ファイルからこれらの関数を使えるようになる
- * 実装 (中身) は sensor.c に書く
- *
- * const VehicleSensorData *: このポインタ経由では値を変更しない宣言
- * 「読むだけ」の責務を型で表現している
- */
+/* センサ値を初期値（停車・アイドリング・常温）に設定する */
 void sensor_init(VehicleSensorData *data);
+/* センサ値をランダム値で更新する（ECU のセンサ読み取りを模倣） */
 void sensor_update(VehicleSensorData *data);
+/* センサ値を1行でコンソールに出力する */
 void sensor_print(const VehicleSensorData *data);
 
 #endif /* SENSOR_H */

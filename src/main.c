@@ -5,45 +5,24 @@
 #include "sensor.h"
 #include "stats.h"
 #include "alert.h"
-#include "status.h"   /* センサ状態分類モジュール (NORMAL / WARNING / CRITICAL) */
+#include "status.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
 
 int main(void) {
-    /*
-     * srand: 乱数の種を設定する
-     * time(NULL) で実行するたびに異なる種になるため、毎回違うセンサ値が得られる
-     * srand を呼ばないと毎回同じ値になる
-     */
+    /* srand: time(NULL) を種にすることで実行ごとに異なる乱数列を生成する */
     srand((unsigned int)time(NULL));
 
-    /*
-     * VehicleSensorData をローカル変数として宣言する
-     * sensor_init に & を付けて渡すことで、
-     * 関数の中からこの変数を直接書き換えられる
-     */
-    VehicleSensorData sensor_data;
+    VehicleSensorData sensor_data;   /* センサ値（各サンプルごとに上書き更新） */
     sensor_init(&sensor_data);
 
-    /*
-     * VehicleStats をローカル変数として宣言する
-     * sensor_data とは別の変数で統計データを管理する
-     */
-    VehicleStats stats;
+    VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
 
-    /*
-     * SensorStatus: 各サンプルの状態レベルを格納する変数
-     * status_check を呼ぶたびに上書きされるため、初期化は不要
-     */
-    SensorStatus sensor_status;
+    SensorStatus sensor_status;     /* 状態レベル（status_check が毎回上書き、初期化不要） */
 
-    /*
-     * メインループ: 1秒ごとにセンサ値を更新・表示する
-     * main.c は「何を・どの順番で呼ぶか」だけを管理する
-     * 各処理の中身は対応するモジュール (.c ファイル) に書く
-     */
+    /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
         printf("[Sample %02d]\n", i);
         sensor_update(&sensor_data);                  /* センサ値を更新する (書く) */
@@ -55,7 +34,6 @@ int main(void) {
         sleep(1);                                     /* 1秒待つ */
     }
 
-    /* 全サンプルの統計結果を表示する */
     stats_print(&stats);
 
     return 0;

@@ -1,37 +1,30 @@
 #ifndef STATS_H
 #define STATS_H
 
+#include <stdint.h>   /* uint8_t / uint16_t / uint32_t などの固定幅整数型 */
 #include "sensor.h"   /* VehicleSensorData を参照するために必要 */
 
-/*
- * VehicleStats: センサ値の統計データをまとめる型
- *
- * sensor.c は「今この瞬間のセンサ値」を管理する
- * stats.c は「これまでの値の最小・最大・合計」を管理する
- * 責務が違うため、sensor.c とは別モジュールにする
- */
 typedef struct {
-    int speed_min;   /* 車速の最小値 [km/h] */
-    int speed_max;   /* 車速の最大値 [km/h] */
-    int speed_sum;   /* 車速の合計（平均計算に使う） */
+    uint8_t  speed_min;   /* 車速の最小値 [km/h] */
+    uint8_t  speed_max;   /* 車速の最大値 [km/h] */
+    uint16_t speed_sum;   /* 車速の合計: 最大 20×120=2,400 → uint16_t で十分 */
 
-    int rpm_min;     /* RPM の最小値 */
-    int rpm_max;     /* RPM の最大値 */
-    int rpm_sum;     /* RPM の合計 */
+    uint16_t rpm_min;     /* RPM の最小値 */
+    uint16_t rpm_max;     /* RPM の最大値 */
+    uint32_t rpm_sum;     /* RPM の合計: 最大 20×6,000=120,000 → uint16_t を超えるため uint32_t */
 
-    int temp_min;    /* 水温の最小値 [℃] */
-    int temp_max;    /* 水温の最大値 [℃] */
-    int temp_sum;    /* 水温の合計 */
+    uint8_t  temp_min;    /* 水温の最小値 [℃] */
+    uint8_t  temp_max;    /* 水温の最大値 [℃] */
+    uint16_t temp_sum;    /* 水温の合計: 最大 20×100=2,000 → uint16_t で十分 */
 
-    int count;       /* 記録したサンプル数 */
+    uint8_t  count;       /* 記録したサンプル数: 最大 20 → uint8_t（最大 255）で十分 */
 } VehicleStats;
 
-/*
- * 関数宣言:
- * stats_update の第2引数は const → センサ値を「読むだけ」で書き換えない
- */
+/* 統計データを初期値にリセットする */
 void stats_init(VehicleStats *stats);
+/* 今回のサンプル値で min / max / sum / count を更新する */
 void stats_update(VehicleStats *stats, const VehicleSensorData *data);
+/* 統計データ（min / max / avg）をコンソールに出力する */
 void stats_print(const VehicleStats *stats);
 
 #endif /* STATS_H */
