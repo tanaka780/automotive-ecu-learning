@@ -5,7 +5,7 @@
 #include "sensor.h"   /* VehicleSensorData を参照するために必要 */
 
 typedef enum {
-    LEVEL_NORMAL   = 0,  /* 正常範囲内 */
+    LEVEL_NORMAL,  /* 正常範囲内 */
     LEVEL_WARNING  = 1,  /* 注意（第1段階の閾値を超えた状態） */
     LEVEL_CRITICAL = 2   /* 危険（第2段階の閾値を超えた状態） */
 } SensorLevel;

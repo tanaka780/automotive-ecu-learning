@@ -66,6 +66,7 @@ make clean && make && make run
 | Phase | テーマ | 状態 |
 | --- | --- | --- |
 | Phase1 | C基礎・データフロー・責務分割 | 完了 |
+| Phase2 | DTC（故障診断コード）管理 | 進行中 |
 
 ---
 
