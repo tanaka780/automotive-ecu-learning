@@ -9,7 +9,7 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim

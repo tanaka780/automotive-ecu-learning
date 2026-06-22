@@ -46,6 +46,7 @@ make clean && make && make run
 | アラート表示 | 閾値を超えたセンサ値を警告表示 |
 | センサ状態表示 | NORMAL / WARNING / CRITICAL の3段階で状態を分類・表示 |
 | 固定幅整数型 | センサ値・統計値を `uint8_t` / `uint16_t` / `uint32_t` で型明示 |
+| DTC記録 | CRITICALに入った瞬間を検出し、センサ別の発生回数を記録・表示 |
 
 ---
 
@@ -58,6 +59,7 @@ make clean && make && make run
 | `stats.c` | 統計値の更新・表示 |
 | `alert.c` | 閾値チェック・警告表示 |
 | `status.c` | センサ値の状態分類（NORMAL / WARNING / CRITICAL）と表示 |
+| `diag.c` | DTC（故障診断コード）の記録・表示 |
 
 ---
 
