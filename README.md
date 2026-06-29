@@ -46,7 +46,7 @@ make clean && make && make run
 | アラート表示 | 閾値を超えたセンサ値を警告表示 |
 | センサ状態表示 | NORMAL / WARNING / CRITICAL の3段階で状態を分類・表示 |
 | 固定幅整数型 | センサ値・統計値を `uint8_t` / `uint16_t` / `uint32_t` で型明示 |
-| DTC記録 | CRITICALに入った瞬間を検出し、センサ別の発生回数を記録・表示 |
+| DTC記録 | CRITICALに入った瞬間を検出し、センサ別の発生回数を配列で記録・表示 |
 
 ---
 

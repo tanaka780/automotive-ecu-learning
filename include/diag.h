@@ -5,11 +5,23 @@
 #include <stdint.h>   /* uint8_t を使うために必要 */
 #include "status.h"   /* SensorStatus を参照するために必要 */
 
-/* センサ別の「CRITICALへ入った回数」と、エッジ検出用の前回状態を持つ */
+/* センサ種別。DtcRecord.entries の配列インデックスとしても使う */
+typedef enum {
+    SENSOR_SPEED = 0,
+    SENSOR_RPM,
+    SENSOR_TEMP,
+    SENSOR_COUNT   /* センサ種別の数（配列サイズに使う。実際のセンサ種別ではない） */
+} SensorId;
+
+/* DTC1件分の情報：どのセンサが、何回CRITICALに入ったか */
 typedef struct {
-    uint8_t speed_crit_count;  /* 車速がCRITICALになった回数 */
-    uint8_t rpm_crit_count;    /* RPM がCRITICALになった回数 */
-    uint8_t temp_crit_count;   /* 水温がCRITICALになった回数 */
+    SensorId sensor;
+    uint8_t  count;
+} DtcEntry;
+
+/* センサ別のDTCエントリを配列で持ち、エッジ検出用の前回状態も保持する */
+typedef struct {
+    DtcEntry     entries[SENSOR_COUNT];
     SensorStatus previous;     /* 前回のSensorStatus（今回との比較に使う） */
 } DtcRecord;
 
