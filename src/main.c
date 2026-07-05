@@ -33,7 +33,7 @@ int main(void) {
         sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
         status_check(&sensor_status, &sensor_data);   /* 状態レベルを判定する */
         status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
-        diag_check(&dtc, &sensor_status);             /* CRITICALに入った瞬間をDTCとして記録する */
+        diag_check(&dtc, &sensor_status, &sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
         alert_check(&sensor_data);                    /* 閾値超過の警告を表示する (読む) */
         stats_update(&stats, &sensor_data);           /* 統計データを更新する */
         sleep(1);                                     /* 1秒待つ */

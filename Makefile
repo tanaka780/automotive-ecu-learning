@@ -14,6 +14,10 @@ SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
 
+# diag.c の動作確認用テスト（固定値データ、main.c は使わない）
+TEST_SRCS = test/test_diag.c src/status.c src/diag.c
+TEST_TARGET = test_diag
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -21,10 +25,18 @@ all: $(TARGET)
 $(TARGET): $(SRCS)
 	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET)
 
+# テスト用実行ファイルのビルドルール
+$(TEST_TARGET): $(TEST_SRCS)
+	$(CC) $(CFLAGS) $(TEST_SRCS) -o $(TEST_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
+# テストターゲット: make test でテスト用実行ファイルをビルドして実行する
+test: $(TEST_TARGET)
+	./$(TEST_TARGET)
+
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(TEST_TARGET)
