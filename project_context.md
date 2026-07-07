@@ -6,9 +6,10 @@
 
 ## 現在の状態
 
-- Phase: Phase2（拡張バックログ進行中、残り1項目）
+- Phase: Phase2（拡張バックログ完了、次はPhase3の着手判断待ち）
 - 実装済み: センサシミュレーション基本実装、統計モジュール、アラートモジュール、センサ状態モジュール、固定幅整数型の導入（uint8_t / uint16_t / uint32_t）、DTCモジュール（diag.c、CRITICALに入った瞬間をセンサ別に検出・配列で記録、状態区分ACTIVE/HISTORY、フリーズフレーム1件記録）
 - テスト: `test/test_diag.c`（固定値データで diag.c の動作を確認、`make test`で実行）
+- 設計メモ: sensor.c / stats.c / alert.c / status.c / diag.c は、いずれも値の更新・判定などの本来の責務に加えて、コンソール表示（`*_print()`）も自分で担っている。表示（出力）を独立した責務として切り出すかはPhase3候補「logger」で検討する（study_plan.md参照）
 
 ---
 
