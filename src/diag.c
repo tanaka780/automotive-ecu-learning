@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "diag.h"
+#include "logger.h"
 
 /* DTC記録を初期値（0件、前回状態はNORMAL、状態区分はNONE、フリーズフレーム未記録）にリセットする */
 void diag_init(DtcRecord *dtc) {
@@ -78,20 +79,25 @@ static const char *dtc_status_to_str(DtcStatus status) {
 
 /* 記録されたDTC一覧をコンソールに出力する */
 void diag_print(const DtcRecord *dtc) {
+    /* Freeze Frame最悪ケース(64文字)に余裕を持たせたサイズ。他モジュールの64との慣習を保つため2のべき乗にする */
+    char line[128];
+
     for (int i = 0; i < SENSOR_COUNT; i++) {
-        printf("[DTC] %-6s%-8s CRITICAL occurrences: %d\n",
-               sensor_name(dtc->entries[i].sensor),
-               dtc_status_to_str(dtc->entries[i].status),
-               (int)dtc->entries[i].count);
+        snprintf(line, sizeof(line), "%-6s%-8s CRITICAL occurrences: %d",
+                 sensor_name(dtc->entries[i].sensor),
+                 dtc_status_to_str(dtc->entries[i].status),
+                 (int)dtc->entries[i].count);
+        log_print_tagged("DTC", line);
     }
 
     if (dtc->freeze_frame.captured) {
-        printf("[DTC] Freeze Frame (trigger: %s) Speed:%3d km/h RPM:%4d Temp:%3d C\n",
-               sensor_name(dtc->freeze_frame.trigger_sensor),
-               (int)dtc->freeze_frame.data.speed,
-               (int)dtc->freeze_frame.data.rpm,
-               (int)dtc->freeze_frame.data.temperature);
+        snprintf(line, sizeof(line), "Freeze Frame (trigger: %s) Speed:%3d km/h RPM:%4d Temp:%3d C",
+                 sensor_name(dtc->freeze_frame.trigger_sensor),
+                 (int)dtc->freeze_frame.data.speed,
+                 (int)dtc->freeze_frame.data.rpm,
+                 (int)dtc->freeze_frame.data.temperature);
+        log_print_tagged("DTC", line);
     } else {
-        printf("[DTC] Freeze Frame: not captured (no CRITICAL occurred)\n");
+        log_print_tagged("DTC", "Freeze Frame: not captured (no CRITICAL occurred)");
     }
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>   /* UINT8_MAX / UINT16_MAX: 固定幅整数型の最大値 */
 #include "stats.h"
+#include "logger.h"
 
 /* 最小値を型の最大値で初期化: 最初のサンプルで必ず更新されることを保証するため */
 void stats_init(VehicleStats *stats) {
@@ -39,17 +40,29 @@ void stats_update(VehicleStats *stats, const VehicleSensorData *data) {
 /* count == 0 のとき sum / count は未定義動作になるため事前にチェックする */
 void stats_print(const VehicleStats *stats) {
     if (stats->count == 0) {
-        printf("No data\n");
+        log_print("No data");
         return;
     }
-    printf("\n--- Stats (%d samples) ---\n", (int)stats->count);
-    printf("Speed: min=%3d  max=%3d  avg=%3d km/h\n",
-           (int)stats->speed_min, (int)stats->speed_max,
-           (int)(stats->speed_sum / stats->count));
-    printf("RPM  : min=%4d  max=%4d  avg=%4d\n",
-           (int)stats->rpm_min, (int)stats->rpm_max,
-           (int)(stats->rpm_sum / stats->count));
-    printf("Temp : min=%3d  max=%3d  avg=%3d C\n",
-           (int)stats->temp_min, (int)stats->temp_max,
-           (int)(stats->temp_sum / stats->count));
+
+    char line[64];   /* 1行ずつ組み立てて出力するため、呼び出しのたびに使い回す */
+
+    log_print("");   /* 見出し前の空行（元のprintf("\n...")の空行部分に相当） */
+
+    snprintf(line, sizeof(line), "--- Stats (%d samples) ---", (int)stats->count);
+    log_print(line);
+
+    snprintf(line, sizeof(line), "Speed: min=%3d  max=%3d  avg=%3d km/h",
+             (int)stats->speed_min, (int)stats->speed_max,
+             (int)(stats->speed_sum / stats->count));
+    log_print(line);
+
+    snprintf(line, sizeof(line), "RPM  : min=%4d  max=%4d  avg=%4d",
+             (int)stats->rpm_min, (int)stats->rpm_max,
+             (int)(stats->rpm_sum / stats->count));
+    log_print(line);
+
+    snprintf(line, sizeof(line), "Temp : min=%3d  max=%3d  avg=%3d C",
+             (int)stats->temp_min, (int)stats->temp_max,
+             (int)(stats->temp_sum / stats->count));
+    log_print(line);
 }

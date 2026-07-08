@@ -67,6 +67,7 @@ make test
 | `alert.c` | 閾値チェック・警告表示 |
 | `status.c` | センサ値の状態分類（NORMAL / WARNING / CRITICAL）と表示 |
 | `diag.c` | DTC（故障診断コード）の記録・表示、フリーズフレームの記録 |
+| `logger.c` | 出力の窓口の一元化（タグなし/タグ付きの表示振り分け） |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 
 ---
@@ -77,7 +78,8 @@ make test
 | --- | --- | --- |
 | Phase1 | C基礎・データフロー・責務分割 | 完了 |
 | Phase2 | DTC（故障診断コード）管理 | 完了 |
-| Phase3 | logger（出力層の共通化、検討中） | 未着手 |
+| Phase3 | logger（出力層の共通化） | 完了 |
+| Phase4 | 学習の抜け漏れ補完（エラーハンドリング／ビット演算／文字列操作） | 未着手 |
 
 ---
 

@@ -9,13 +9,13 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
 
 # diag.c の動作確認用テスト（固定値データ、main.c は使わない）
-TEST_SRCS = test/test_diag.c src/status.c src/diag.c
+TEST_SRCS = test/test_diag.c src/status.c src/diag.c src/logger.c
 TEST_TARGET = test_diag
 
 # デフォルトターゲット: make だけ打つとこれが実行される

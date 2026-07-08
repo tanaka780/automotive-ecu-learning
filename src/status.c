@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "status.h"
+#include "logger.h"
 
 /* speed / rpm / temp で同じ判定ロジックを共通化するヘルパー */
 static SensorLevel classify_level(int value, int warn, int crit) {
@@ -30,8 +31,10 @@ static const char *level_to_str(SensorLevel level) {
 
 /* 各センサの状態レベルを1行でコンソールに出力する */
 void status_print(const SensorStatus *status) {
-    printf("[STATUS] Speed: %s | RPM: %s | Temp: %s\n",
-           level_to_str(status->speed_level),
-           level_to_str(status->rpm_level),
-           level_to_str(status->temp_level));
+    char line[64];   /* "Speed: NORMAL   | RPM: NORMAL   | Temp: NORMAL  " が収まるサイズ */
+    snprintf(line, sizeof(line), "Speed: %s | RPM: %s | Temp: %s",
+             level_to_str(status->speed_level),
+             level_to_str(status->rpm_level),
+             level_to_str(status->temp_level));
+    log_print_tagged("STATUS", line);
 }

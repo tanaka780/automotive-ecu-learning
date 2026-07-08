@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>   /* rand() を使うために必要 */
 #include "sensor.h"
+#include "logger.h"
 
 /* センサ値を初期値（停車・アイドリング・常温）に設定する */
 void sensor_init(VehicleSensorData *data) {
@@ -18,6 +19,8 @@ void sensor_update(VehicleSensorData *data) {
 
 /* センサ値を1行でコンソールに出力する */
 void sensor_print(const VehicleSensorData *data) {
-    printf("Speed: %3d km/h | RPM: %4d | Temp: %3d C\n",
-           (int)data->speed, (int)data->rpm, (int)data->temperature);
+    char line[64];   /* "Speed: 120 km/h | RPM: 6000 | Temp: 100 C" が収まるサイズ */
+    snprintf(line, sizeof(line), "Speed: %3d km/h | RPM: %4d | Temp: %3d C",
+             (int)data->speed, (int)data->rpm, (int)data->temperature);
+    log_print(line);
 }
