@@ -7,6 +7,7 @@
 #include "alert.h"
 #include "status.h"
 #include "diag.h"
+#include "logger.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -28,7 +29,9 @@ int main(void) {
 
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
-        printf("[Sample %02d]\n", i);
+        char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
+        snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", i);
+        log_print(sample_line);
         sensor_update(&sensor_data);                  /* センサ値を更新する (書く) */
         sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
         status_check(&sensor_status, &sensor_data);   /* 状態レベルを判定する */

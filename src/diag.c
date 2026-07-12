@@ -5,13 +5,11 @@
 /* DTC記録を初期値（0件、前回状態はNORMAL、状態区分はNONE、フリーズフレーム未記録）にリセットする */
 void diag_init(DtcRecord *dtc) {
     for (int i = 0; i < SENSOR_COUNT; i++) {
-        dtc->entries[i].sensor = (SensorId)i;
-        dtc->entries[i].count  = 0;
-        dtc->entries[i].status = DTC_NONE;
+        dtc->entries[i].sensor  = (SensorId)i;
+        dtc->entries[i].count   = 0;
+        dtc->entries[i].status  = DTC_NONE;
+        dtc->previous.levels[i] = LEVEL_NORMAL;
     }
-    dtc->previous.speed_level = LEVEL_NORMAL;
-    dtc->previous.rpm_level   = LEVEL_NORMAL;
-    dtc->previous.temp_level  = LEVEL_NORMAL;
 
     dtc->freeze_frame.data.speed       = 0;
     dtc->freeze_frame.data.rpm         = 0;
@@ -24,21 +22,9 @@ void diag_init(DtcRecord *dtc) {
    現在CRITICAL中ならACTIVE、CRITICALから外れたらHISTORYに遷移させる。
    最初のエッジでフリーズフレーム（車両状態のスナップショット）を1件だけ記録する */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data) {
-    /* status.cを変更せずに配列ループで扱うため、個別フィールドを一時配列へ詰め替える */
-    const SensorLevel current[SENSOR_COUNT] = {
-        status->speed_level,
-        status->rpm_level,
-        status->temp_level
-    };
-    const SensorLevel previous[SENSOR_COUNT] = {
-        dtc->previous.speed_level,
-        dtc->previous.rpm_level,
-        dtc->previous.temp_level
-    };
-
     for (int i = 0; i < SENSOR_COUNT; i++) {
-        if (current[i] == LEVEL_CRITICAL) {
-            if (previous[i] != LEVEL_CRITICAL) {
+        if (status->levels[i] == LEVEL_CRITICAL) {
+            if (dtc->previous.levels[i] != LEVEL_CRITICAL) {
                 dtc->entries[i].count++;
                 /* 全体で最初のCRITICAL発生時だけスナップショットを記録する（以降は上書きしない） */
                 if (!dtc->freeze_frame.captured) {

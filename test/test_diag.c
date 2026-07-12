@@ -42,27 +42,27 @@ static void test_status_boundary(void) {
 
     d.speed = 100; d.rpm = 2000; d.temperature = 50;
     status_check(&status, &d);
-    check("Speed=100はCRITICALではない(WARNING境界)", status.speed_level == LEVEL_WARNING);
+    check("Speed=100はCRITICALではない(WARNING境界)", status.levels[SENSOR_SPEED] == LEVEL_WARNING);
 
     d.speed = 101;
     status_check(&status, &d);
-    check("Speed=101でCRITICALになる(境界値+1)", status.speed_level == LEVEL_CRITICAL);
+    check("Speed=101でCRITICALになる(境界値+1)", status.levels[SENSOR_SPEED] == LEVEL_CRITICAL);
 
     d.speed = 50; d.rpm = 5000;
     status_check(&status, &d);
-    check("RPM=5000はCRITICALではない(WARNING境界)", status.rpm_level == LEVEL_WARNING);
+    check("RPM=5000はCRITICALではない(WARNING境界)", status.levels[SENSOR_RPM] == LEVEL_WARNING);
 
     d.rpm = 5001;
     status_check(&status, &d);
-    check("RPM=5001でCRITICALになる(境界値+1)", status.rpm_level == LEVEL_CRITICAL);
+    check("RPM=5001でCRITICALになる(境界値+1)", status.levels[SENSOR_RPM] == LEVEL_CRITICAL);
 
     d.rpm = 2000; d.temperature = 90;
     status_check(&status, &d);
-    check("Temp=90はCRITICALではない(WARNING境界)", status.temp_level == LEVEL_WARNING);
+    check("Temp=90はCRITICALではない(WARNING境界)", status.levels[SENSOR_TEMP] == LEVEL_WARNING);
 
     d.temperature = 91;
     status_check(&status, &d);
-    check("Temp=91でCRITICALになる(境界値+1)", status.temp_level == LEVEL_CRITICAL);
+    check("Temp=91でCRITICALになる(境界値+1)", status.levels[SENSOR_TEMP] == LEVEL_CRITICAL);
 }
 
 /* RPMの発生回数・状態区分（ACTIVE/HISTORY）・フリーズフレームの一連の流れを境界値で確認する */

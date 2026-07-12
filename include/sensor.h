@@ -10,6 +10,14 @@ typedef struct {
     uint8_t  temperature;  /* 水温 [℃]: 25〜100（常温〜冷却水沸点） */
 } VehicleSensorData;
 
+/* センサ種別。SensorStatus.levels / DtcRecord.entries の配列インデックスとしても使う */
+typedef enum {
+    SENSOR_SPEED = 0,
+    SENSOR_RPM,
+    SENSOR_TEMP,
+    SENSOR_COUNT   /* センサ種別の数（配列サイズに使う。実際のセンサ種別ではない） */
+} SensorId;
+
 /* センサ値を初期値（停車・アイドリング・常温）に設定する */
 void sensor_init(VehicleSensorData *data);
 /* センサ値をランダム値で更新する（ECU のセンサ読み取りを模倣） */

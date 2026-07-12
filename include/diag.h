@@ -5,15 +5,7 @@
 #include <stdint.h>   /* uint8_t を使うために必要 */
 #include <stdbool.h>  /* bool を使うために必要 */
 #include "status.h"   /* SensorStatus を参照するために必要 */
-#include "sensor.h"   /* VehicleSensorData を参照するために必要（フリーズフレーム用） */
-
-/* センサ種別。DtcRecord.entries の配列インデックスとしても使う */
-typedef enum {
-    SENSOR_SPEED = 0,
-    SENSOR_RPM,
-    SENSOR_TEMP,
-    SENSOR_COUNT   /* センサ種別の数（配列サイズに使う。実際のセンサ種別ではない） */
-} SensorId;
+#include "sensor.h"   /* VehicleSensorData（フリーズフレーム用）と、SensorId（DtcEntry.sensor等で使用）を参照するために必要 */
 
 /* DTCの状態区分：現在も継続中か、過去に発生して解消済みか */
 typedef enum {

@@ -2,7 +2,7 @@
 #ifndef STATUS_H
 #define STATUS_H
 
-#include "sensor.h"   /* VehicleSensorData を参照するために必要 */
+#include "sensor.h"   /* VehicleSensorDataと、levels配列のサイズに使うSENSOR_COUNTを参照するために必要 */
 
 typedef enum {
     LEVEL_NORMAL   = 0,  /* 正常範囲内 */
@@ -19,11 +19,10 @@ typedef enum {
 #define STATUS_TEMP_WARN    80   /* 水温 注意レベルの境界 [℃] */
 #define STATUS_TEMP_CRIT    90   /* 水温 危険レベルの境界 [℃] */
 
-/* センサの生の値は持たず、分類結果（SensorLevel）だけを持つ */
+/* センサの生の値は持たず、分類結果（SensorLevel）だけを持つ。
+   添字はSensorId（sensor.h）を使う */
 typedef struct {
-    SensorLevel speed_level;  /* 車速の状態レベル */
-    SensorLevel rpm_level;    /* RPM の状態レベル */
-    SensorLevel temp_level;   /* 水温の状態レベル */
+    SensorLevel levels[SENSOR_COUNT];
 } SensorStatus;
 
 /* 各センサ値を閾値と比較して状態レベルを分類する */

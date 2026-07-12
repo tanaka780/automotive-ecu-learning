@@ -11,12 +11,12 @@ static SensorLevel classify_level(int value, int warn, int crit) {
 
 /* 各センサ値を閾値と比較して状態レベル（NORMAL / WARNING / CRITICAL）を分類する */
 void status_check(SensorStatus *status, const VehicleSensorData *data) {
-    status->speed_level = classify_level(data->speed,
-                                         STATUS_SPEED_WARN, STATUS_SPEED_CRIT);
-    status->rpm_level   = classify_level(data->rpm,
-                                         STATUS_RPM_WARN,   STATUS_RPM_CRIT);
-    status->temp_level  = classify_level(data->temperature,
-                                         STATUS_TEMP_WARN,  STATUS_TEMP_CRIT);
+    status->levels[SENSOR_SPEED] = classify_level(data->speed,
+                                                   STATUS_SPEED_WARN, STATUS_SPEED_CRIT);
+    status->levels[SENSOR_RPM]   = classify_level(data->rpm,
+                                                   STATUS_RPM_WARN,   STATUS_RPM_CRIT);
+    status->levels[SENSOR_TEMP]  = classify_level(data->temperature,
+                                                   STATUS_TEMP_WARN,  STATUS_TEMP_CRIT);
 }
 
 /* 文字列長を8文字で揃えて status_print の表示幅を合わせる */
@@ -33,8 +33,8 @@ static const char *level_to_str(SensorLevel level) {
 void status_print(const SensorStatus *status) {
     char line[64];   /* "Speed: NORMAL   | RPM: NORMAL   | Temp: NORMAL  " が収まるサイズ */
     snprintf(line, sizeof(line), "Speed: %s | RPM: %s | Temp: %s",
-             level_to_str(status->speed_level),
-             level_to_str(status->rpm_level),
-             level_to_str(status->temp_level));
+             level_to_str(status->levels[SENSOR_SPEED]),
+             level_to_str(status->levels[SENSOR_RPM]),
+             level_to_str(status->levels[SENSOR_TEMP]));
     log_print_tagged("STATUS", line);
 }
