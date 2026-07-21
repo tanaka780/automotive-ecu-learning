@@ -9,6 +9,7 @@
 #include "diag.h"
 #include "logger.h"
 #include "ignition.h"
+#include "persist.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -27,6 +28,7 @@ int main(void) {
 
     DtcRecord dtc;                  /* DTC記録（センサ別のCRITICAL発生回数、前回状態を内部に保持） */
     diag_init(&dtc);
+    persist_load_dtc(&dtc, PERSIST_DTC_FILENAME);  /* 保存ファイルが無ければ(初回起動等)diag_initの初期値のまま継続する */
 
     Ignition ignition;               /* イグニッション状態（現在・前回を内部に保持） */
     ignition_init(&ignition);
@@ -56,6 +58,7 @@ int main(void) {
 
     stats_print(&stats);
     diag_print(&dtc);                                 /* DTC一覧を表示する */
+    persist_save_dtc(&dtc, PERSIST_DTC_FILENAME);      /* 次回起動時のためにDTC記録を保存する */
 
     return 0;
 }
