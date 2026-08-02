@@ -2,4 +2,7 @@ sensor_sim
 *.o
 .claude/
 test_diag
+test_persist
+test_stats
 dtc_data.txt
+test_dtc_data.txt

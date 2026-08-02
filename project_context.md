@@ -6,9 +6,9 @@
 
 ## 現在の状態
 
-- Phase: Phase5（DTCの永続化＝ファイルI/O）に着手中。Phase1〜4は完了、Phase5は永続化の実装が完了、エラーハンドリングの検証とテスト整備が未完了（詳細はstudy_plan.md参照）
+- Phase: Phase1〜5は完了。Phase5（DTCの永続化＝ファイルI/O）は、永続化の実装・エラーハンドリング・test/test_persist.cによるテスト・test_common.h/.cへの重複整理・stats.cへの自動テスト追加（拡張バックログ）まで完了した。次のテーマとしてPhase6（標準出力キャプチャによるalert.c/ignition.cの自動テスト追加）を予定している（詳細はstudy_plan.md参照）
 - 実装済み: センサシミュレーション、統計、アラート、センサ状態、固定幅整数型、DTC（記録・状態区分・フリーズフレーム）、logger、イグニッション状態管理、DTC永続化（詳細はモジュール構成表・study_plan.md参照）
-- テスト: `test/test_diag.c`（固定値データでdiag.cの動作を確認、`make test`で実行）。sensor.c/stats.c/alert.c/logger.c/ignition.c/persist.cは未テスト（`test/test_persist.c`はstudy_plan.md Phase5のタスクとして未着手）
+- テスト: `test/test_diag.c`（固定値データでdiag.cの動作を確認）、`test/test_persist.c`（固定値データ・意図的に壊したデータでpersist.cの正常系・異常系を確認）、`test/test_stats.c`（固定値データでstats.cのmin/max/sum/countの更新を確認）。いずれも`make test`で実行。結果判定・サマリ表示の共通補助関数は`test/test_common.h` / `.c`に切り出し済み（サンプル投入用の`test_feed`/`test_run_sample`は`DtcRecord`前提のため`test_diag.c`/`test_persist.c`のみで使用し、`test_stats.c`はローカルのヘルパーを使う）。sensor.c/alert.c/logger.c/ignition.cは未テスト
 
 ---
 
@@ -26,6 +26,9 @@
 | `ignition.c` | `Ignition` | — | イグニッション状態（OFF/ON）のランダム更新、前回との比較による遷移検出、状態の表示 |
 | `persist.c` | `DtcRecord`（読み込み時のみ書く） | `DtcRecord`（保存時は読むのみ） | `DtcRecord`とテキストの相互変換、ファイルへの保存・読み込み、成功/失敗のログ表示。`previous`は保存対象に含めない |
 | `test/test_diag.c` | — | `diag.c`・`status.c`（読むのみ） | 固定値データを使い、diag.cの発生回数・状態区分・フリーズフレームが期待通りかを確認する |
+| `test/test_persist.c` | — | `persist.c`・`diag.c`・`status.c`（読むのみ） | 固定値データと意図的に壊したデータを使い、persist.cの保存・読み込みが正常系・異常系（ファイル無し、値不足、数値以外）で期待通りかを確認する。本番の`dtc_data.txt`とは別のテスト専用ファイル名を使う |
+| `test/test_stats.c` | — | `stats.c`（読むのみ） | 固定値データを使い、stats.cのmin/max/sum/countの更新（初期値、1サンプル、複数サンプルでのmin/max更新、平均計算）が期待通りかを確認する。サンプル投入用のヘルパーはtest_common.cを使わずファイル内にローカルで定義する |
+| `test/test_common.c` | — | — | `test_diag.c` / `test_persist.c` / `test_stats.c`で共通のテスト補助関数（結果判定`test_check`、サマリ表示`test_summary`）を提供する。サンプル投入用の`test_feed`/`test_run_sample`は`DtcRecord`前提のため`test_diag.c`/`test_persist.c`のみで使用する |
 
 補足: `SensorId`（センサ種別を表す識別子）は`sensor.h`で定義しており、`SensorStatus.levels`と`DtcRecord.entries`の両方が添字として共有する。
 

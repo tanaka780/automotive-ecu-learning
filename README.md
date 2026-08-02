@@ -35,7 +35,7 @@ C言語未経験から始め、車載ECUで使われる考え方を小規模な�
 make clean && make && make run
 ```
 
-テスト（diag.c の動作確認、固定値データ使用）:
+テスト（diag.c・persist.c・stats.c の動作確認、固定値データ使用）:
 
 ```bash
 make test
@@ -73,6 +73,9 @@ make test
 | `ignition.c` | イグニッション状態（OFF/ON）の更新・遷移検出・表示 |
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
+| `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
+| `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
+| `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c のみで使用する |
 
 ---
 
@@ -84,7 +87,7 @@ make test
 | Phase2 | DTC（故障診断コード）管理 | 完了 |
 | Phase3 | logger（出力層の共通化） | 完了 |
 | Phase4 | 状態遷移（イグニッション状態管理） | 完了（OFF中は他モジュール呼び出しをスキップ。サイクルまたぎのDTC/統計はリセットせず継続） |
-| Phase5 | DTCの永続化（ファイルI/O） | 実施中（永続化の実装は完了。エラーハンドリングの検証、テスト整備が未完了） |
+| Phase5 | DTCの永続化（ファイルI/O） | 完了（永続化の実装、エラーハンドリング、test/test_persist.cによるテスト、test_diag.cとの重複処理のtest_common.h/.cへの切り出しまで完了） |
 
 ---
 
@@ -92,3 +95,4 @@ make test
 
 - 実車ECUや実CAN通信とは接続していない
 - センサ値は学習用の簡易モデルであり、実車の物理モデルではない
+- DTC永続化データの読み込みは、値の個数が正しければ読み込み成功と判定しており、個々の値が意味的にありえる範囲かまではチェックしていない
