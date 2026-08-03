@@ -28,6 +28,11 @@ TEST_PERSIST_TARGET = test_persist
 TEST_STATS_SRCS = test/test_stats.c test/test_common.c src/status.c src/diag.c src/logger.c src/stats.c
 TEST_STATS_TARGET = test_stats
 
+# alert.c の動作確認用テスト（標準出力キャプチャによる警告出力の確認、main.c は使わない）
+# test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
+TEST_ALERT_SRCS = test/test_alert.c test/test_common.c src/status.c src/diag.c src/logger.c src/alert.c
+TEST_ALERT_TARGET = test_alert
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -45,16 +50,20 @@ $(TEST_PERSIST_TARGET): $(TEST_PERSIST_SRCS)
 $(TEST_STATS_TARGET): $(TEST_STATS_SRCS)
 	$(CC) $(CFLAGS) $(TEST_STATS_SRCS) -o $(TEST_STATS_TARGET)
 
+$(TEST_ALERT_TARGET): $(TEST_ALERT_SRCS)
+	$(CC) $(CFLAGS) $(TEST_ALERT_SRCS) -o $(TEST_ALERT_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_statsをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alertをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
+	./$(TEST_ALERT_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET)

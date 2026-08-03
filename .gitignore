@@ -4,5 +4,6 @@ sensor_sim
 test_diag
 test_persist
 test_stats
+test_alert
 dtc_data.txt
 test_dtc_data.txt
