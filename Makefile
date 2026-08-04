@@ -33,6 +33,11 @@ TEST_STATS_TARGET = test_stats
 TEST_ALERT_SRCS = test/test_alert.c test/test_common.c src/status.c src/diag.c src/logger.c src/alert.c
 TEST_ALERT_TARGET = test_alert
 
+# ignition.c の動作確認用テスト（標準出力キャプチャによる遷移イベント出力の確認、main.c は使わない）
+# test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
+TEST_IGNITION_SRCS = test/test_ignition.c test/test_common.c src/status.c src/diag.c src/logger.c src/ignition.c
+TEST_IGNITION_TARGET = test_ignition
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -53,17 +58,21 @@ $(TEST_STATS_TARGET): $(TEST_STATS_SRCS)
 $(TEST_ALERT_TARGET): $(TEST_ALERT_SRCS)
 	$(CC) $(CFLAGS) $(TEST_ALERT_SRCS) -o $(TEST_ALERT_TARGET)
 
+$(TEST_IGNITION_TARGET): $(TEST_IGNITION_SRCS)
+	$(CC) $(CFLAGS) $(TEST_IGNITION_SRCS) -o $(TEST_IGNITION_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alertをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignitionをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
 	./$(TEST_ALERT_TARGET)
+	./$(TEST_IGNITION_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET)
