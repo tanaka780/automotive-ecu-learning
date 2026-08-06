@@ -10,6 +10,7 @@
 #include "logger.h"
 #include "ignition.h"
 #include "persist.h"
+#include "cmd.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -58,6 +59,13 @@ int main(void) {
 
     stats_print(&stats);
     diag_print(&dtc);                                 /* DTC一覧を表示する */
+
+    log_print("Enter command (clear/Enter to skip):"); /* 診断ツールからのコマンド入力を受け付ける */
+    char command_line[CMD_BUF_SIZE];
+    if (cmd_read_line(command_line, sizeof(command_line))) {
+        cmd_dispatch(command_line, &dtc);
+    }
+
     persist_save_dtc(&dtc, PERSIST_DTC_FILENAME);      /* 次回起動時のためにDTC記録を保存する */
 
     return 0;

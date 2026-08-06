@@ -43,6 +43,12 @@ void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorD
     dtc->previous = *status;
 }
 
+/* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態に戻す */
+void diag_clear(DtcRecord *dtc) {
+    diag_init(dtc);
+    log_print_tagged("DTC", "Cleared");
+}
+
 /* センサ種別から表示名を返す（diag_print専用の表示ヘルパー） */
 static const char *sensor_name(SensorId sensor) {
     switch (sensor) {

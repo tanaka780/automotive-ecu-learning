@@ -9,7 +9,7 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -38,6 +38,11 @@ TEST_ALERT_TARGET = test_alert
 TEST_IGNITION_SRCS = test/test_ignition.c test/test_common.c src/status.c src/diag.c src/logger.c src/ignition.c
 TEST_IGNITION_TARGET = test_ignition
 
+# cmd.c の動作確認用テスト（diag_clear・cmd_dispatchの確認、main.c は使わない）
+# test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
+TEST_CMD_SRCS = test/test_cmd.c test/test_common.c src/status.c src/diag.c src/logger.c src/cmd.c
+TEST_CMD_TARGET = test_cmd
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -61,18 +66,22 @@ $(TEST_ALERT_TARGET): $(TEST_ALERT_SRCS)
 $(TEST_IGNITION_TARGET): $(TEST_IGNITION_SRCS)
 	$(CC) $(CFLAGS) $(TEST_IGNITION_SRCS) -o $(TEST_IGNITION_TARGET)
 
+$(TEST_CMD_TARGET): $(TEST_CMD_SRCS)
+	$(CC) $(CFLAGS) $(TEST_CMD_SRCS) -o $(TEST_CMD_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignitionをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmdをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
 	./$(TEST_ALERT_TARGET)
 	./$(TEST_IGNITION_TARGET)
+	./$(TEST_CMD_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET)

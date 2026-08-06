@@ -39,6 +39,8 @@ typedef struct {
 void diag_init(DtcRecord *dtc);
 /* 前回/今回のCRITICAL比較により、発生回数・ACTIVE/HISTORYの状態区分・フリーズフレームを更新する */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data);
+/* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態(diag_initと同じ)に戻す */
+void diag_clear(DtcRecord *dtc);
 /* 記録されたDTC一覧をコンソールに出力する */
 void diag_print(const DtcRecord *dtc);
 

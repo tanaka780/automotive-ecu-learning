@@ -35,7 +35,7 @@ C言語未経験から始め、車載ECUで使われる考え方を小規模な�
 make clean && make && make run
 ```
 
-テスト（diag.c・persist.c・stats.c の動作確認、固定値データ使用）:
+テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c の動作確認、固定値データ使用）:
 
 ```bash
 make test
@@ -56,6 +56,7 @@ make test
 | フリーズフレーム | 最初にCRITICALが発生した瞬間の全センサ値を1件だけ記録・表示 |
 | イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示 |
 | DTC永続化 | プログラム終了時にDTC記録をテキストファイルへ保存し、次回起動時に読み込んで継続する |
+| 診断コマンド | プログラム終了時に`clear`コマンドを入力すると、DTC記録（発生回数・状態区分・フリーズフレーム）をリセットできる（UDS風のDTCクリアの簡易再現） |
 
 ---
 
@@ -72,12 +73,14 @@ make test
 | `logger.c` | 出力の窓口の一元化（タグなし/タグ付きの表示振り分け） |
 | `ignition.c` | イグニッション状態（OFF/ON）の更新・遷移検出・表示 |
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
+| `cmd.c` | 標準入力から診断コマンド（`clear`相当）を読み込み、解釈してDTC記録のクリアを要求する |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
 | `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
 | `test/test_alert.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による alert.c の動作確認（`make test`で実行）。閾値境界・単独超過・複数同時超過時の警告出力を確認する |
 | `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する |
-| `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c のみで使用する |
+| `test/test_cmd.c` | 固定値データによる `diag_clear`・`cmd_dispatch` の動作確認（`make test`で実行）。標準入力を扱う `cmd_read_line` は対象外（`make run`での実行確認で扱う） |
+| `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c / test_cmd.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c / test_cmd.c のみで使用する |
 
 ---
 
@@ -91,6 +94,7 @@ make test
 | Phase4 | 状態遷移（イグニッション状態管理） | 完了（OFF中は他モジュール呼び出しをスキップ。サイクルまたぎのDTC/統計はリセットせず継続） |
 | Phase5 | DTCの永続化（ファイルI/O） | 完了（永続化の実装、エラーハンドリング、test/test_persist.cによるテスト、test_diag.cとの重複処理のtest_common.h/.cへの切り出し、stats.cへの自動テスト追加まで完了） |
 | Phase6 | 標準出力を伴う判定処理のテスト（標準出力キャプチャ） | 完了（alert.c・ignition.cの自動テスト（test/test_alert.c・test/test_ignition.c）、Makefile統合まで完了） |
+| Phase7 | 診断コマンド入力（UDS風のDTCクリア） | 完了（`clear`コマンドによるDTCクリア、`cmd.c`の新設、`test/test_cmd.c`によるテストまで完了。実際のUDSと比べるとクリア範囲指定・拒否理由の区別・受付条件の制限が無く簡易的なため、拡張バックログとして深堀りを検討中） |
 
 ---
 
@@ -99,3 +103,4 @@ make test
 - 実車ECUや実CAN通信とは接続していない
 - センサ値は学習用の簡易モデルであり、実車の物理モデルではない
 - DTC永続化データの読み込みは、値の個数が正しければ読み込み成功と判定しており、個々の値が意味的にありえる範囲かまではチェックしていない
+- 診断コマンドは`clear`のみに対応しており、大文字小文字を区別し前後の空白もトリムしない完全一致判定。他のUDS診断サービスは再現していない
