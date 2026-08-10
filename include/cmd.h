@@ -11,7 +11,8 @@
 
 /* 標準入力から1行読み込み、末尾の改行を取り除く。EOF等で読み込めない場合はfalseを返す */
 bool cmd_read_line(char *buf, size_t bufsize);
-/* 読み込んだ文字列を解釈する。"clear"ならDTC記録をクリアし、それ以外の文字列(空文字列は除く)は認識できない旨を表示する */
+/* 読み込んだ文字列を解釈する。"clear"は全DTCを、"clear <センサ名>"（speed/rpm/temp）は指定センサ1件だけをクリアする。
+   それ以外（想定外のコマンド、"clear"に続く不正なセンサ名、余分なトークン）は認識できない旨を表示する。空文字列は何もしない */
 void cmd_dispatch(const char *line, DtcRecord *dtc);
 
 #endif /* CMD_H */

@@ -41,6 +41,9 @@ void diag_init(DtcRecord *dtc);
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data);
 /* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態(diag_initと同じ)に戻す */
 void diag_clear(DtcRecord *dtc);
+/* 診断コマンド（"clear <センサ名>"相当）によるクリア要求を受けて、指定したセンサ1件分のDTCエントリだけを初期状態に戻す。
+   フリーズフレームは、その原因が指定センサだった場合だけ合わせて初期状態に戻し、原因が別センサなら保持する */
+void diag_clear_sensor(DtcRecord *dtc, SensorId sensor);
 /* 記録されたDTC一覧をコンソールに出力する */
 void diag_print(const DtcRecord *dtc);
 

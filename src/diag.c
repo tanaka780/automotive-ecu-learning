@@ -2,6 +2,9 @@
 #include "diag.h"
 #include "logger.h"
 
+/* センサ種別から表示名を返す（本体は下記。diag_clear_sensorのログ表示で先に使うための前方宣言） */
+static const char *sensor_name(SensorId sensor);
+
 /* DTC記録を初期値（0件、前回状態はNORMAL、状態区分はNONE、フリーズフレーム未記録）にリセットする */
 void diag_init(DtcRecord *dtc) {
     for (int i = 0; i < SENSOR_COUNT; i++) {
@@ -47,6 +50,26 @@ void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorD
 void diag_clear(DtcRecord *dtc) {
     diag_init(dtc);
     log_print_tagged("DTC", "Cleared");
+}
+
+/* 診断コマンド（"clear <センサ名>"相当）によるクリア要求を受けて、指定したセンサ1件分のDTCエントリだけを初期状態に戻す。
+   フリーズフレームは1件しか保持しないため、その原因が指定センサと一致する場合だけ合わせて初期状態に戻し、
+   原因が別センサなら保持する（例：Speedの記録をクリアしても、原因がTempのフリーズフレームは残す） */
+void diag_clear_sensor(DtcRecord *dtc, SensorId sensor) {
+    dtc->entries[sensor].count  = 0;
+    dtc->entries[sensor].status = DTC_NONE;
+
+    if (dtc->freeze_frame.captured && dtc->freeze_frame.trigger_sensor == sensor) {
+        dtc->freeze_frame.data.speed       = 0;
+        dtc->freeze_frame.data.rpm         = 0;
+        dtc->freeze_frame.data.temperature = 0;
+        dtc->freeze_frame.trigger_sensor   = SENSOR_SPEED;
+        dtc->freeze_frame.captured         = false;
+    }
+
+    char line[32];   /* "Cleared: Speed" 相当が収まるサイズ */
+    snprintf(line, sizeof(line), "Cleared: %s", sensor_name(sensor));
+    log_print_tagged("DTC", line);
 }
 
 /* センサ種別から表示名を返す（diag_print専用の表示ヘルパー） */
