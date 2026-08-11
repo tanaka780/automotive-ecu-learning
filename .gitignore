@@ -6,5 +6,6 @@ test_persist
 test_stats
 test_alert
 test_ignition
+test_cmd
 dtc_data.txt
 test_dtc_data.txt

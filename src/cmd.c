@@ -71,3 +71,8 @@ void cmd_dispatch(const char *line, DtcRecord *dtc) {
     /* n == 3: "clear <対象> <余分なトークン>" は想定外の入力として扱う */
     log_print_tagged("CMD", "Unknown command");
 }
+
+/* 受付条件（イグニッションOFF時のみ）を満たさないため、コマンドを受け付けなかったことを通知する */
+void cmd_notify_rejected(void) {
+    log_print_tagged("CMD", "Not accepted (ignition ON)");
+}

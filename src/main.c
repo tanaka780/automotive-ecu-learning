@@ -60,10 +60,15 @@ int main(void) {
     stats_print(&stats);
     diag_print(&dtc);                                 /* DTC一覧を表示する */
 
-    log_print("Enter command (clear/Enter to skip):"); /* 診断ツールからのコマンド入力を受け付ける */
-    char command_line[CMD_BUF_SIZE];
-    if (cmd_read_line(command_line, sizeof(command_line))) {
-        cmd_dispatch(command_line, &dtc);
+    /* 実車でスキャンツールが駐車中(イグニッションOFF)に接続される状況を再現し、OFF時のみコマンドを受け付ける */
+    if (ignition.current == IGNITION_OFF) {
+        log_print("Enter command (clear/Enter to skip):"); /* 診断ツールからのコマンド入力を受け付ける */
+        char command_line[CMD_BUF_SIZE];
+        if (cmd_read_line(command_line, sizeof(command_line))) {
+            cmd_dispatch(command_line, &dtc);
+        }
+    } else {
+        cmd_notify_rejected();
     }
 
     persist_save_dtc(&dtc, PERSIST_DTC_FILENAME);      /* 次回起動時のためにDTC記録を保存する */
