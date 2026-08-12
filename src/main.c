@@ -11,6 +11,7 @@
 #include "ignition.h"
 #include "persist.h"
 #include "cmd.h"
+#include "config.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -24,6 +25,11 @@ int main(void) {
 
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
+
+    ConfigData config;                /* 閾値の設定値（alert_check/status_checkへの受け渡しは次回対応） */
+    config_init(&config);
+    config_load(&config, CONFIG_FILENAME);
+    config_print(&config);
 
     SensorStatus sensor_status;     /* 状態レベル（status_check が毎回上書き、初期化不要） */
 

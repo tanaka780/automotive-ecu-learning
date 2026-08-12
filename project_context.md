@@ -6,9 +6,10 @@
 
 ## 現在の状態
 
-- Phase: Phase1〜7は完了（詳細はstudy_plan.md参照）
+- Phase: Phase1〜7は完了。Phase8（Config：閾値の外部化）着手中、タスク1（`config.h`/`config.c`の新規作成、`main.c`への最小限の組み込み）まで完了（詳細はstudy_plan.md参照）
 - 実装済み: センサシミュレーション、統計、アラート、センサ状態、固定幅整数型、DTC（記録・状態区分・フリーズフレーム）、logger、イグニッション状態管理、DTC永続化、診断コマンド（`clear`によるDTC全体クリア、`clear <センサ名>`によるセンサ単位クリア、想定外入力の理由別通知、イグニッションOFF時のみの受付制限）（詳細はモジュール構成表・study_plan.md参照）
-- テスト: `test/test_diag.c`（固定値データでdiag.cの動作を確認）、`test/test_persist.c`（固定値データ・意図的に壊したデータでpersist.cの正常系・異常系を確認）、`test/test_stats.c`（固定値データでstats.cのmin/max/sum/countの更新を確認）、`test/test_alert.c`（標準出力キャプチャでalert.cの警告出力を確認）、`test/test_ignition.c`（標準出力キャプチャでignition.cの遷移イベント出力を確認）、`test/test_cmd.c`（固定値データで`diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ）の動作を確認。標準入力を扱う`cmd_read_line`は対象外）。いずれも`make test`で実行。結果判定・サマリ表示の共通補助関数は`test/test_common.h` / `.c`に切り出し済み（サンプル投入用の`test_feed`/`test_run_sample`は`DtcRecord`前提のため`test_diag.c`/`test_persist.c`/`test_cmd.c`で使用し、`test_stats.c`はローカルのヘルパーを使う。test_alert.c・test_ignition.cは標準出力キャプチャ用のヘルパーをそれぞれファイル内にローカルで定義している）。sensor.c/logger.c/cmd.c（`cmd_read_line`のみ）は未テスト
+- 実装中: 閾値の設定ファイル化（`config.c`）。`alert.h`の3閾値+`status.h`の6閾値（計9個）をKEY=VALUE形式のファイルから読み込む部分までは完成し`main.c`で確認表示しているが、`alert_check`/`status_check`側でこの値を実際に使う変更はまだ行っていない（現状は`alert.h`/`status.h`のマクロが引き続き有効）
+- テスト: `test/test_diag.c`（固定値データでdiag.cの動作を確認）、`test/test_persist.c`（固定値データ・意図的に壊したデータでpersist.cの正常系・異常系を確認）、`test/test_stats.c`（固定値データでstats.cのmin/max/sum/countの更新を確認）、`test/test_alert.c`（標準出力キャプチャでalert.cの警告出力を確認）、`test/test_ignition.c`（標準出力キャプチャでignition.cの遷移イベント出力を確認）、`test/test_cmd.c`（固定値データで`diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ）の動作を確認。標準入力を扱う`cmd_read_line`は対象外）。いずれも`make test`で実行。結果判定・サマリ表示の共通補助関数は`test/test_common.h` / `.c`に切り出し済み（サンプル投入用の`test_feed`/`test_run_sample`は`DtcRecord`前提のため`test_diag.c`/`test_persist.c`/`test_cmd.c`で使用し、`test_stats.c`はローカルのヘルパーを使う。test_alert.c・test_ignition.cは標準出力キャプチャ用のヘルパーをそれぞれファイル内にローカルで定義している）。sensor.c/logger.c/cmd.c（`cmd_read_line`のみ）/config.cは未テスト
 
 ---
 
@@ -26,6 +27,7 @@
 | `ignition.c` | `Ignition` | — | イグニッション状態（OFF/ON）のランダム更新、前回との比較による遷移検出、状態の表示 |
 | `persist.c` | `DtcRecord`（読み込み時のみ書く） | `DtcRecord`（保存時は読むのみ） | `DtcRecord`とテキストの相互変換、ファイルへの保存・読み込み、成功/失敗のログ表示。`previous`は保存対象に含めない |
 | `cmd.c` | —（`DtcRecord`の変更は`diag_clear`／`diag_clear_sensor`経由） | 標準入力の文字列 | 標準入力から1行読み込み末尾の改行を除去する（`cmd_read_line`）。読み込んだ文字列を`sscanf`で最大3トークンに分割し、`"clear"`（トークン1個）なら`diag_clear`、`"clear <センサ名>"`（トークン2個、speed/rpm/temp）なら`diag_clear_sensor`を呼び出す。それ以外（1語目が`clear`でない、`clear`に続くセンサ名が不正、トークンが3個以上）は`DtcRecord`を変更せず、理由に応じて`[CMD]`タグでログ表示する（`cmd_dispatch`）。センサ名の文字列→`SensorId`変換はcmd.c内のローカル関数（`parse_sensor_name`）が担う。受付条件（イグニッションOFF時のみ）を満たさない場合に`[CMD] Not accepted (ignition ON)`を表示する`cmd_notify_rejected`も提供する（受付可否の判定自体はmain.cが行い、cmd.cはメッセージ内容のみを持つ） |
+| `config.c` | `ConfigData` | 設定ファイルの文字列、`alert.h`/`status.h`のマクロ（デフォルト値として） | 閾値9個（alert.hの3つ+status.hの6つ）を`alert.h`/`status.h`の現行マクロ値で初期化し（`config_init`）、`KEY=VALUE`形式の設定ファイルがあれば読み込んで上書きする（`config_load`）。ファイルが無い場合はデフォルト値のまま変更しない。読み込んだ値を1行でログ出力する（`config_print`）。現時点では`main.c`で読み込み・表示するところまでで、`alert.c`/`status.c`へはまだ渡していない |
 | `test/test_diag.c` | — | `diag.c`・`status.c`（読むのみ） | 固定値データを使い、diag.cの発生回数・状態区分・フリーズフレームが期待通りかを確認する |
 | `test/test_persist.c` | — | `persist.c`・`diag.c`・`status.c`（読むのみ） | 固定値データと意図的に壊したデータを使い、persist.cの保存・読み込みが正常系・異常系（ファイル無し、値不足、数値以外）で期待通りかを確認する。本番の`dtc_data.txt`とは別のテスト専用ファイル名を使う |
 | `test/test_stats.c` | — | `stats.c`（読むのみ） | 固定値データを使い、stats.cのmin/max/sum/countの更新（初期値、1サンプル、複数サンプルでのmin/max更新、平均計算）が期待通りかを確認する。サンプル投入用のヘルパーはtest_common.cを使わずファイル内にローカルで定義する |
