@@ -35,7 +35,7 @@ C言語未経験から始め、車載ECUで使われる考え方を小規模な�
 make clean && make && make run
 ```
 
-テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c の動作確認、固定値データ使用）:
+テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c・config.c の動作確認、固定値データ使用）:
 
 ```bash
 make test
@@ -57,6 +57,7 @@ make test
 | イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示 |
 | DTC永続化 | プログラム終了時にDTC記録をテキストファイルへ保存し、次回起動時に読み込んで継続する |
 | 診断コマンド | プログラム終了時、イグニッションOFF時のみ`clear`コマンドを入力すると全DTC記録を、`clear <センサ名>`（speed/rpm/temp）を入力すると指定センサ1件分のDTC記録だけをリセットできる（UDS風のDTCクリアの簡易再現）。フリーズフレームは、その原因がクリア対象のセンサと一致する場合だけ合わせてリセットする。イグニッションON時はコマンドを受け付けず、受け付けなかった旨を表示する |
+| 閾値の外部設定 | `config.txt`（`KEY=VALUE`形式）から警告・状態判定の閾値9個を読み込む。ファイルが無ければデフォルト値（`alert.h`/`status.h`のマクロ値）のまま動作する |
 
 ---
 
@@ -74,14 +75,15 @@ make test
 | `ignition.c` | イグニッション状態（OFF/ON）の更新・遷移検出・表示 |
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
 | `cmd.c` | 標準入力から診断コマンド（`clear`／`clear <センサ名>`相当）を読み込み、解釈してDTC記録のクリア（全体／センサ単位）を要求する。想定外の入力は理由に応じて区別して通知する。イグニッションOFF時のみという受付条件を満たさない場合の通知（`cmd_notify_rejected`）も担う |
-| `config.c` | 閾値（alert.c/status.c計9個）の設定値を保持し、`KEY=VALUE`形式の設定ファイルから読み込む（ファイルが無ければデフォルト値のまま）。現時点ではalert.c/status.cへの反映は未実装 |
+| `config.c` | 閾値（alert.c/status.c計9個）の設定値を保持し、`KEY=VALUE`形式の設定ファイルから読み込む（ファイルが無ければデフォルト値のまま）。読み込んだ値はalert.c/status.cの判定に実際に反映される |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
 | `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
 | `test/test_alert.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による alert.c の動作確認（`make test`で実行）。閾値境界・単独超過・複数同時超過時の警告出力を確認する |
 | `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する |
 | `test/test_cmd.c` | 固定値データによる `diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ等）の動作確認（`make test`で実行）。標準入力を扱う `cmd_read_line` は対象外（`make run`での実行確認で扱う） |
-| `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c / test_cmd.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c / test_cmd.c のみで使用する |
+| `test/test_config.c` | 固定値データによる `config_load` のファイルパース動作確認（`make test`で実行）。正常系（全9キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、キー重複時は後勝ち）を確認する |
+| `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c / test_cmd.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c / test_cmd.c のみで使用する。デフォルトの`ConfigData`を返す`test_default_config()`も提供し、test_diag.c・test_alert.c・test_config.cの直接呼び出しからも共有される |
 
 ---
 
@@ -96,7 +98,7 @@ make test
 | Phase5 | DTCの永続化（ファイルI/O） | 完了（永続化の実装、エラーハンドリング、test/test_persist.cによるテスト、test_diag.cとの重複処理のtest_common.h/.cへの切り出し、stats.cへの自動テスト追加まで完了） |
 | Phase6 | 標準出力を伴う判定処理のテスト（標準出力キャプチャ） | 完了（alert.c・ignition.cの自動テスト（test/test_alert.c・test/test_ignition.c）、Makefile統合まで完了） |
 | Phase7 | 診断コマンド入力（UDS風のDTCクリア） | 完了。拡張バックログのうち、クリア範囲の指定（`clear <センサ名>`）、拒否理由の区別（不正なセンサ名／想定外コマンドの区別）、受付条件の制限（イグニッションOFF時のみ）まで対応済み。イグニッションOFF遷移時に受付タイミングを変える案はTimer/Scheduler以降に先送り |
-| Phase8 | Config（閾値の外部化） | 進行中。`config.h`/`config.c`の新規作成と`main.c`への組み込み（読み込み・確認表示）まで完了。`alert.c`/`status.c`への反映、自動テストは未着手 |
+| Phase8 | Config（閾値の外部化） | 完了（`config.h`/`config.c`の新規作成、`main.c`への組み込み、`alert.c`/`status.c`への反映、非デフォルトconfigでの判定反映を確認する自動テスト、`test_config.c`によるファイルパースの正常系・異常系テストまで完了） |
 
 ---
 
@@ -107,4 +109,3 @@ make test
 - DTC永続化データの読み込みは、値の個数が正しければ読み込み成功と判定しており、個々の値が意味的にありえる範囲かまではチェックしていない
 - 診断コマンドは`clear`／`clear <センサ名>`（speed/rpm/temp）のみに対応しており、大文字小文字を区別し前後の空白もトリムしない完全一致判定。拒否理由の区別も「不正なセンサ名」「イグニッションON中で受付不可」「それ以外の想定外コマンド」の3種類にとどまる。他のUDS診断サービスは再現していない
 - 診断コマンドの受付タイミングはサンプルループ終了後の1回のみで変わっていない。イグニッションOFFへ遷移した瞬間を検出して受け付ける（実際の駐車中スキャンツール接続に近い挙動）わけではなく、ループ終了時点の状態がたまたまOFFかどうかで受付可否が決まる
-- 閾値の設定ファイル化（config.c）は読み込み・確認表示までの実装にとどまり、alert.c/status.cの判定処理にはまだ反映されていない。現状の警告・状態判定は引き続きalert.h/status.hのマクロ値で動作する

@@ -3,6 +3,7 @@
 #define STATUS_H
 
 #include "sensor.h"   /* VehicleSensorDataと、levels配列のサイズに使うSENSOR_COUNTを参照するために必要 */
+#include "config.h"   /* ConfigData を参照するために必要 */
 
 typedef enum {
     LEVEL_NORMAL   = 0,  /* 正常範囲内 */
@@ -10,6 +11,7 @@ typedef enum {
     LEVEL_CRITICAL = 2   /* 危険（第2段階の閾値を超えた状態） */
 } SensorLevel;
 
+/* config.cのconfig_initがデフォルト値として使う元値（設定ファイル未使用時の閾値そのものではない） */
 #define STATUS_SPEED_WARN   80   /* 車速 注意レベルの境界 [km/h] */
 #define STATUS_SPEED_CRIT  100   /* 車速 危険レベルの境界 [km/h] */
 
@@ -25,8 +27,8 @@ typedef struct {
     SensorLevel levels[SENSOR_COUNT];
 } SensorStatus;
 
-/* 各センサ値を閾値と比較して状態レベルを分類する */
-void status_check(SensorStatus *status, const VehicleSensorData *data);
+/* 各センサ値をconfigの閾値と比較して状態レベルを分類する */
+void status_check(SensorStatus *status, const VehicleSensorData *data, const ConfigData *config);
 /* 各センサの状態レベルを1行でコンソールに出力する */
 void status_print(const SensorStatus *status);
 

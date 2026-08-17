@@ -9,14 +9,14 @@ static SensorLevel classify_level(int value, int warn, int crit) {
     return LEVEL_NORMAL;
 }
 
-/* 各センサ値を閾値と比較して状態レベル（NORMAL / WARNING / CRITICAL）を分類する */
-void status_check(SensorStatus *status, const VehicleSensorData *data) {
+/* 各センサ値をconfigの閾値と比較して状態レベル（NORMAL / WARNING / CRITICAL）を分類する */
+void status_check(SensorStatus *status, const VehicleSensorData *data, const ConfigData *config) {
     status->levels[SENSOR_SPEED] = classify_level(data->speed,
-                                                   STATUS_SPEED_WARN, STATUS_SPEED_CRIT);
+                                                   config->status_speed_warn, config->status_speed_crit);
     status->levels[SENSOR_RPM]   = classify_level(data->rpm,
-                                                   STATUS_RPM_WARN,   STATUS_RPM_CRIT);
+                                                   config->status_rpm_warn,   config->status_rpm_crit);
     status->levels[SENSOR_TEMP]  = classify_level(data->temperature,
-                                                   STATUS_TEMP_WARN,  STATUS_TEMP_CRIT);
+                                                   config->status_temp_warn,  config->status_temp_crit);
 }
 
 /* 文字列長を8文字で揃えて status_print の表示幅を合わせる */

@@ -12,28 +12,49 @@ static void test_status_boundary(void) {
     SensorStatus status;
 
     d.speed = 100; d.rpm = 2000; d.temperature = 50;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("Speed=100はCRITICALではない(WARNING境界)", status.levels[SENSOR_SPEED] == LEVEL_WARNING);
 
     d.speed = 101;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("Speed=101でCRITICALになる(境界値+1)", status.levels[SENSOR_SPEED] == LEVEL_CRITICAL);
 
     d.speed = 50; d.rpm = 5000;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("RPM=5000はCRITICALではない(WARNING境界)", status.levels[SENSOR_RPM] == LEVEL_WARNING);
 
     d.rpm = 5001;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("RPM=5001でCRITICALになる(境界値+1)", status.levels[SENSOR_RPM] == LEVEL_CRITICAL);
 
     d.rpm = 2000; d.temperature = 90;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("Temp=90はCRITICALではない(WARNING境界)", status.levels[SENSOR_TEMP] == LEVEL_WARNING);
 
     d.temperature = 91;
-    status_check(&status, &d);
+    status_check(&status, &d, test_default_config());
     test_check("Temp=91でCRITICALになる(境界値+1)", status.levels[SENSOR_TEMP] == LEVEL_CRITICAL);
+}
+
+/* 非デフォルトのConfigDataを渡すと、デフォルトならNORMAL/WARNINGどまりの値でも
+   下げた閾値に応じてWARNING/CRITICALに変わることを確認する */
+static void test_status_check_custom_config(void) {
+    ConfigData cfg = *test_default_config();
+    cfg.status_speed_warn = 40;   /* デフォルト80から引き下げ */
+    cfg.status_speed_crit = 50;   /* デフォルト100から引き下げ */
+
+    VehicleSensorData d;
+    SensorStatus status;
+
+    d.speed = 45; d.rpm = 2000; d.temperature = 50;   /* デフォルトならNORMALな速度 */
+    status_check(&status, &d, &cfg);
+    test_check("非デフォルトconfig: Speed=45はデフォルトならNORMALだがWARNINGになる",
+          status.levels[SENSOR_SPEED] == LEVEL_WARNING);
+
+    d.speed = 51;   /* 新しいCRITICAL境界値+1 */
+    status_check(&status, &d, &cfg);
+    test_check("非デフォルトconfig: Speed=51で新しい閾値通りCRITICALになる",
+          status.levels[SENSOR_SPEED] == LEVEL_CRITICAL);
 }
 
 /* RPMの発生回数・状態区分（ACTIVE/HISTORY）・フリーズフレームの一連の流れを境界値で確認する */
@@ -140,6 +161,7 @@ static void test_freeze_frame_tie_break_rpm_vs_temp(void) {
 
 int main(void) {
     test_status_boundary();
+    test_status_check_custom_config();
     test_rpm_lifecycle_and_freeze_frame();
     test_active_to_history_via_warning();
     test_freeze_frame_not_captured_without_critical();

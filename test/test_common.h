@@ -5,9 +5,14 @@
 #include <stdint.h>   /* uint8_t / uint16_t を使うために必要 */
 #include "sensor.h"   /* VehicleSensorData を参照するために必要 */
 #include "diag.h"     /* DtcRecord を参照するために必要 */
+#include "config.h"   /* ConfigData を参照するために必要 */
 
 /* 期待した結果かどうかを表示し、pass/fail件数を数える */
 void test_check(const char *label, int condition);
+
+/* テスト共通のデフォルトConfigData（config_init相当の値）を返す。
+   閾値そのものを変えて確認するテストは対象外とし、alert.h/status.hの現行値で固定する */
+const ConfigData *test_default_config(void);
 
 /* main.c の1サンプル分の流れ（status_check → diag_check）を再現する */
 void test_run_sample(DtcRecord *dtc, const VehicleSensorData *data);

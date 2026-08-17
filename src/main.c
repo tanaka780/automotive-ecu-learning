@@ -26,7 +26,7 @@ int main(void) {
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
 
-    ConfigData config;                /* 閾値の設定値（alert_check/status_checkへの受け渡しは次回対応） */
+    ConfigData config;                /* 閾値の設定値（alert_check/status_checkに渡す） */
     config_init(&config);
     config_load(&config, CONFIG_FILENAME);
     config_print(&config);
@@ -53,10 +53,10 @@ int main(void) {
         if (ignition.current == IGNITION_ON) {
             sensor_update(&sensor_data);                  /* センサ値を更新する (書く) */
             sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
-            status_check(&sensor_status, &sensor_data);   /* 状態レベルを判定する */
+            status_check(&sensor_status, &sensor_data, &config); /* 状態レベルを判定する */
             status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
             diag_check(&dtc, &sensor_status, &sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
-            alert_check(&sensor_data);                    /* 閾値超過の警告を表示する (読む) */
+            alert_check(&sensor_data, &config);           /* 閾値超過の警告を表示する (読む) */
             stats_update(&stats, &sensor_data);           /* 統計データを更新する */
         }
 

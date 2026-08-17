@@ -207,10 +207,10 @@ Day19時点でPhase7本来のタスク（コマンド受け付け方の検討・
 
 ### タスク
 
-- [x] `config.h`/`config.c`を新規作成する：外部化対象は`alert.h`の3閾値+`status.h`の6閾値（計9個、`sensor.c`のセンサ値レンジは物理定数としての性質が強いため対象外）、ファイル形式は`KEY=VALUE`（persist.cでテキスト形式を選んだ「catで確認できる」理由に合わせ、位置固定より自己記述的な形式にした）、読み込み失敗時は`alert.h`/`status.h`の現行マクロ値にフォールバックする（persist.cの「読み込めなければ現状維持で継続する」設計に合わせた）。Makefile本体ターゲットに`config.c`を追加し、`main.c`から`config_init`/`config_load`/`config_print`を呼び出して読み込んだ値をログ出力する状態まで実装した（`alert_check`/`status_check`への引き渡しは次のタスクで行う）。ビルド警告なし、既存`make test`6ファイル計116件に影響なし、`config.txt`が無い状態で`alert.h`/`status.h`の現行値通りに表示されることを確認した
-- [ ] `alert.c`/`status.c`の関数シグネチャに`const ConfigData *`を追加してマクロ参照箇所を置き換え、`main.c`の`alert_check`/`status_check`呼び出しに`ConfigData`を渡すよう更新する。`test_common.c`・`test_alert.c`も合わせて更新し、Makefileの各テストターゲットに`config.c`を追加する（新規.c追加時のMakefile更新漏れ確認を兼ねる）
-- [ ] `test_config.c`の要否を検討し、必要なら正常系・異常系（未知のキー、キー重複、値欠落など）の自動テストを追加する
-- [ ] README.md / project_context.mdとの整合を確認する
+- [x] `config.h`/`config.c`を新規作成する：外部化対象は`alert.h`の3閾値+`status.h`の6閾値（計9個、`sensor.c`のセンサ値レンジは物理定数としての性質が強いため対象外）、ファイル形式は`KEY=VALUE`（persist.cでテキスト形式を選んだ「catで確認できる」理由に合わせ、位置固定より自己記述的な形式にする）、読み込み失敗時は`alert.h`/`status.h`の現行マクロ値にフォールバックする（persist.cの「読み込めなければ現状維持で継続する」設計に合わせる）。Makefile本体ターゲットに`config.c`を追加し、`main.c`から`config_init`/`config_load`/`config_print`を呼び出して読み込んだ値をログ出力する状態まで実装する（`alert_check`/`status_check`への引き渡しは次のタスクで行う）。ビルド警告なし、既存`make test`6ファイル計116件に影響なし、`config.txt`が無い状態で`alert.h`/`status.h`の現行値通りに表示されることを確認する
+- [x] `alert.c`/`status.c`の関数シグネチャに`const ConfigData *`を追加してマクロ参照箇所を置き換え、`main.c`の`alert_check`/`status_check`呼び出しに`ConfigData`を渡すよう更新する。対象は`main.c`・`test_common.c`・`test_alert.c`に加え、`status_check`を直接呼んでいる`test_diag.c`（6箇所）も含める。個別対応はせず、`test_common.c`に共有のデフォルト`ConfigData`を返す`test_default_config()`を新設し、`test_diag.c`・`test_alert.c`から使い回す形にする。Makefileの6テストターゲット全てに`config.c`を追加する
+- [x] 非デフォルトの`ConfigData`を渡したときに`alert_check`/`status_check`の判定が実際に変わることを確認する自動テストを追加する。既存の`test_alert.c`・`test_diag.c`にケースを追加する方針とし、新規`test_config.c`は作らない（`test_config.c`はファイルパース自体の検証用として下記タスクに切り分ける）
+- [x] `test_config.c`を新規作成し、代表的なケース（正常系1つ、異常系2つ：不正行の無視・キー重複時の後勝ち）に絞って自動テストを追加する
 
 ---
 
