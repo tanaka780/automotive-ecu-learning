@@ -6,7 +6,7 @@
 
 ## 現在の状態
 
-- Phase: Phase1〜8は完了（詳細はstudy_plan.md参照）
+- Phase: Phase1〜8は完了。Phase9（Logger拡張：ログレベル）は選定理由・理解目標・タスクをstudy_plan.mdに整理済みで、実装は未着手（詳細はstudy_plan.md参照）
 - 実装済み: センサシミュレーション、統計、アラート、センサ状態、固定幅整数型、DTC（記録・状態区分・フリーズフレーム）、logger、イグニッション状態管理、DTC永続化、診断コマンド（`clear`によるDTC全体クリア、`clear <センサ名>`によるセンサ単位クリア、想定外入力の理由別通知、イグニッションOFF時のみの受付制限）、閾値の設定ファイル化（`config.c`。`alert.h`の3閾値+`status.h`の6閾値（計9個）をKEY=VALUE形式のファイルから読み込み、`alert_check`/`status_check`に`const ConfigData *`として渡す）（詳細はモジュール構成表・study_plan.md参照）
 - テスト: `test/test_diag.c`（固定値データでdiag.cの動作を確認。`status_check`の境界値確認は直接呼び出し。非デフォルト`ConfigData`での分類変化も確認）、`test/test_persist.c`（固定値データ・意図的に壊したデータでpersist.cの正常系・異常系を確認）、`test/test_stats.c`（固定値データでstats.cのmin/max/sum/countの更新を確認）、`test/test_alert.c`（標準出力キャプチャでalert.cの警告出力を確認。`alert_check`の直接呼び出し。非デフォルト`ConfigData`での警告有無の変化も確認）、`test/test_ignition.c`（標準出力キャプチャでignition.cの遷移イベント出力を確認）、`test/test_cmd.c`（固定値データで`diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ）の動作を確認。標準入力を扱う`cmd_read_line`は対象外）、`test/test_config.c`（`config_load`のファイルパースを確認。正常系：全9キーが反映される、異常系：未知のキー・値欠落・数値以外の行は無視される、異常系：キー重複時は後勝ち）。いずれも`make test`で実行。結果判定・サマリ表示の共通補助関数は`test/test_common.h` / `.c`に切り出し済み（サンプル投入用の`test_feed`/`test_run_sample`は`DtcRecord`前提のため`test_diag.c`/`test_persist.c`/`test_cmd.c`で使用し、`test_stats.c`はローカルのヘルパーを使う。test_alert.c・test_ignition.c・test_config.cは標準出力キャプチャ用／ファイル書き込み用のヘルパーをそれぞれファイル内にローカルで定義している）。`test_common.c`は`test_default_config()`でデフォルトの`ConfigData`（`config_init`相当）も提供し、`test_diag.c`・`test_alert.c`・`test_config.c`の直接呼び出しからも共有される。sensor.c/logger.c/cmd.c（`cmd_read_line`のみ）/config.c（`config_print`のみ）は未テスト
 
