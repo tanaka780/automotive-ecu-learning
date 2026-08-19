@@ -4,6 +4,7 @@
 
 #include <stdint.h>   /* uint8_t / uint16_t を使うために必要 */
 #include <stdbool.h>  /* bool を使うために必要 */
+#include "logger.h"   /* LogLevel を使うために必要 */
 
 /* 設定ファイルのデフォルトのファイル名 */
 #define CONFIG_FILENAME "config.txt"
@@ -19,6 +20,7 @@ typedef struct {
     uint16_t status_rpm_crit;
     uint8_t  status_temp_warn;
     uint8_t  status_temp_crit;
+    LogLevel log_level;
 } ConfigData;
 
 /* 設定値を、alert.h/status.hの現行マクロ値で初期化する（設定ファイルが無い/壊れている場合のデフォルト値になる） */

@@ -49,7 +49,7 @@ void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorD
 /* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態に戻す */
 void diag_clear(DtcRecord *dtc) {
     diag_init(dtc);
-    log_print_tagged("DTC", "Cleared");
+    log_print_leveled(LOG_INFO, "DTC", "Cleared");
 }
 
 /* 診断コマンド（"clear <センサ名>"相当）によるクリア要求を受けて、指定したセンサ1件分のDTCエントリだけを初期状態に戻す。
@@ -69,7 +69,7 @@ void diag_clear_sensor(DtcRecord *dtc, SensorId sensor) {
 
     char line[32];   /* "Cleared: Speed" 相当が収まるサイズ */
     snprintf(line, sizeof(line), "Cleared: %s", sensor_name(sensor));
-    log_print_tagged("DTC", line);
+    log_print_leveled(LOG_INFO, "DTC", line);
 }
 
 /* センサ種別から表示名を返す（diag_print専用の表示ヘルパー） */
@@ -102,7 +102,7 @@ void diag_print(const DtcRecord *dtc) {
                  sensor_name(dtc->entries[i].sensor),
                  dtc_status_to_str(dtc->entries[i].status),
                  (int)dtc->entries[i].count);
-        log_print_tagged("DTC", line);
+        log_print_leveled(LOG_INFO, "DTC", line);
     }
 
     if (dtc->freeze_frame.captured) {
@@ -111,8 +111,8 @@ void diag_print(const DtcRecord *dtc) {
                  (int)dtc->freeze_frame.data.speed,
                  (int)dtc->freeze_frame.data.rpm,
                  (int)dtc->freeze_frame.data.temperature);
-        log_print_tagged("DTC", line);
+        log_print_leveled(LOG_INFO, "DTC", line);
     } else {
-        log_print_tagged("DTC", "Freeze Frame: not captured (no CRITICAL occurred)");
+        log_print_leveled(LOG_INFO, "DTC", "Freeze Frame: not captured (no CRITICAL occurred)");
     }
 }

@@ -49,7 +49,7 @@ void cmd_dispatch(const char *line, DtcRecord *dtc) {
 
     /* nが1未満(空白のみの入力)の場合はcommandが未初期化のため、strcmpより先に判定する */
     if (n < 1 || strcmp(command, "clear") != 0) {
-        log_print_tagged("CMD", "Unknown command");
+        log_print_leveled(LOG_INFO, "CMD", "Unknown command");
         return;
     }
 
@@ -63,16 +63,16 @@ void cmd_dispatch(const char *line, DtcRecord *dtc) {
         if (parse_sensor_name(target, &sensor)) {
             diag_clear_sensor(dtc, sensor);
         } else {
-            log_print_tagged("CMD", "Unknown target for clear (use speed/rpm/temp)");
+            log_print_leveled(LOG_INFO, "CMD", "Unknown target for clear (use speed/rpm/temp)");
         }
         return;
     }
 
     /* n == 3: "clear <対象> <余分なトークン>" は想定外の入力として扱う */
-    log_print_tagged("CMD", "Unknown command");
+    log_print_leveled(LOG_INFO, "CMD", "Unknown command");
 }
 
 /* 受付条件（イグニッションOFF時のみ）を満たさないため、コマンドを受け付けなかったことを通知する */
 void cmd_notify_rejected(void) {
-    log_print_tagged("CMD", "Not accepted (ignition ON)");
+    log_print_leveled(LOG_INFO, "CMD", "Not accepted (ignition ON)");
 }

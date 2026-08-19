@@ -19,6 +19,7 @@ void config_init(ConfigData *config) {
     config->status_rpm_crit   = STATUS_RPM_CRIT;
     config->status_temp_warn  = STATUS_TEMP_WARN;
     config->status_temp_crit  = STATUS_TEMP_CRIT;
+    config->log_level         = LOG_INFO;
 }
 
 /* "KEY=VALUE" の1行を解釈し、該当するキーがあればconfigの対応フィールドを上書きする。
@@ -49,11 +50,16 @@ static void apply_line(ConfigData *config, const char *line) {
         config->status_temp_warn = (uint8_t)value;
     } else if (strcmp(key, "STATUS_TEMP_CRIT") == 0) {
         config->status_temp_crit = (uint8_t)value;
+    } else if (strcmp(key, "LOG_LEVEL") == 0) {
+        /* 0=LOG_INFO, 1=LOG_WARNING, 2=LOG_ERROR（logger.hのLogLevel定義順と一致させる） */
+        config->log_level = (LogLevel)value;
     }
     /* 未知のキーは無視する */
 }
 
-/* 指定したファイルからKEY=VALUE形式で設定値を読み込む */
+/* 指定したファイルからKEY=VALUE形式で設定値を読み込む。
+   ここの2つのログはlog_level自体が確定する前（本関数の実行中）に出るため、
+   あえてlog_print_taggedのまま（レベル制御の対象外）にしている */
 bool config_load(ConfigData *config, const char *filename) {
     FILE *fp = fopen(filename, "r");
     if (fp == NULL) {
@@ -79,5 +85,5 @@ void config_print(const ConfigData *config) {
              (int)config->alert_speed_max, (int)config->alert_rpm_max, (int)config->alert_temp_max,
              (int)config->status_speed_warn, (int)config->status_rpm_warn, (int)config->status_temp_warn,
              (int)config->status_speed_crit, (int)config->status_rpm_crit, (int)config->status_temp_crit);
-    log_print_tagged("CONFIG", line);
+    log_print_leveled(LOG_INFO, "CONFIG", line);
 }

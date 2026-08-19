@@ -97,11 +97,11 @@ bool persist_save_dtc(const DtcRecord *dtc, const char *filename) {
     dtc_to_text(dtc, text, sizeof(text));
 
     if (!write_text_to_file(filename, text)) {
-        log_print_tagged("PERSIST", "Failed to save DTC data");
+        log_print_leveled(LOG_ERROR, "PERSIST", "Failed to save DTC data");
         return false;
     }
 
-    log_print_tagged("PERSIST", "Saved DTC data");
+    log_print_leveled(LOG_INFO, "PERSIST", "Saved DTC data");
     return true;
 }
 
@@ -111,15 +111,15 @@ bool persist_load_dtc(DtcRecord *dtc, const char *filename) {
 
     /* ファイルが無い場合(初回起動)と、ファイルはあるが内容が壊れている場合を区別して表示する */
     if (!read_text_from_file(filename, text, sizeof(text))) {
-        log_print_tagged("PERSIST", "No saved data (first run)");
+        log_print_leveled(LOG_INFO, "PERSIST", "No saved data (first run)");
         return false;
     }
 
     if (!text_to_dtc(text, dtc)) {
-        log_print_tagged("PERSIST", "Saved data is corrupted, ignoring");
+        log_print_leveled(LOG_ERROR, "PERSIST", "Saved data is corrupted, ignoring");
         return false;
     }
 
-    log_print_tagged("PERSIST", "Loaded saved DTC data");
+    log_print_leveled(LOG_INFO, "PERSIST", "Loaded saved DTC data");
     return true;
 }

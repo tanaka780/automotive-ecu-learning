@@ -29,6 +29,7 @@ int main(void) {
     ConfigData config;                /* 閾値の設定値（alert_check/status_checkに渡す） */
     config_init(&config);
     config_load(&config, CONFIG_FILENAME);
+    logger_set_level(config.log_level);   /* config_load直後に呼ぶ: 以降のlog_print_leveled呼び出しに反映させる */
     config_print(&config);
 
     SensorStatus sensor_status;     /* 状態レベル（status_check が毎回上書き、初期化不要） */

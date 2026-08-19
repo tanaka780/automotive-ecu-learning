@@ -229,38 +229,61 @@ Day19時点でPhase7本来のタスク（コマンド受け付け方の検討・
 
 ### タスク
 
-- [ ] `logger.h`に`LogLevel`（`LOG_INFO`/`LOG_WARNING`/`LOG_ERROR`の3段階）を定義し、レベル・タグ・メッセージの3つを受け取る`log_print_leveled`を新設する
-- [ ] `ConfigData`に`log_level`フィールドを追加し、`config_init`でデフォルト値（`LOG_INFO`＝全部表示）を設定、`config_load`の`apply_line`に`LOG_LEVEL`キーを追加する
-- [ ] `logger.c`に現在の表示閾値を保持する仕組み（`logger_set_level`等）を追加し、`main.c`から`config_load`後に1回呼び出す。`log_print_leveled`は渡された`level`と保持済みの閾値を比較し、閾値未満なら出力しない
-- [ ] 既存の全ログ呼び出し（`CONFIG`/`IGN`/`STATUS`/`ALERT`/`DTC`/`PERSIST`/`CMD`、計20箇所前後）を`log_print_leveled`に置き換える。レベルは呼び出しごとに個別判断する（`CONFIG`/`IGN`/`STATUS`/`CMD`/`DTC`は基本`LOG_INFO`、`ALERT`は`LOG_WARNING`、`PERSIST`は保存/読み込みが目的を達成できなかった場合のみ`LOG_ERROR`、それ以外は`LOG_INFO`）
-- [ ] タグ無しの`log_print`（`sensor.c`・`stats.c`・`main.c`のセンサ値・統計・サンプル番号表示）はレベル制御の対象外とし、常に表示されることを確認する
-- [ ] `config.txt`が無い、または`LOG_LEVEL`の行が無い場合に、従来通り全てのログが表示されることを`make run`で確認する
-- [ ] 既存の自動テスト（特に標準出力キャプチャを使う`test_alert.c`・`test_ignition.c`）が、`log_print_leveled`への置き換え後も期待通りの出力を得られるか確認する。影響があれば対応方法を検討する
+- [x] `logger.h`に`LogLevel`（`LOG_INFO`/`LOG_WARNING`/`LOG_ERROR`）を定義し`log_print_leveled`を新設する。`logger.c`に表示閾値の保持（`logger_set_level`）も実装し、`alert.c`で試験的に動作確認する
+- [x] `ConfigData`に`log_level`フィールドを追加し、`config_init`でデフォルト`LOG_INFO`を設定、`config_load`の`apply_line`に`LOG_LEVEL`キー（数値0/1/2）を追加する
+- [x] `main.c`の`config_load`直後に`logger_set_level(config.log_level)`を呼び出す配線を追加する
+- [x] 残るログ呼び出し（`IGN`/`STATUS`/`DTC`/`PERSIST`/`CMD`/`CONFIG`）をPhase3の前例に倣って`log_print_leveled`に置き換える。`PERSIST`は保存失敗・データ破損時のみ`LOG_ERROR`とする（初回起動でファイル無しは正常な状態のため`LOG_INFO`。当初は達成可否だけで判断し両方ERRORにしていたが、実態に合わせて修正した）。`CONFIG`は`config_print`のみレベル化し、`config_load`自身の読み込み結果ログ2箇所は、その時点でまだ`log_level`が確定していないため`log_print_tagged`のまま残す
 
 ---
+
+## 開発方針（Phase9以降）
+
+Phase1〜9では、自動車関連プログラムに使われる個々の機能を、主に「C初心者として次に何を学ぶべきか」という学習順序の観点で選んで実装してきた。Phase9以降は、この学習順序だけでなく、完成目標であるECUソフトウェアシミュレータ（車両状態を模擬し、異常を検出・診断・記録し、電源再投入後も診断情報を保持できるECU）に本当に必要かどうかを主な選定基準とする。新しい技術要素の学習自体は今後も続く。
+
+新しい機能を追加する際は、CLAUDE.md記載の判断順序（①ストーリー上の必要性→②既存責務への影響→③テスト方法→④Phase化）に従って検討する。
+
+## 完成時に目指す車両シナリオ（概要）
+
+- 正常走行：Ignition ON → センサ更新 → 状態判定 → 正常走行 → Ignition OFF
+- 故障発生：走行中にセンサ異常 → Status/Alert → DTC登録 → Freeze Frame保存 → Logger
+- 電源再投入：Ignition OFF時にDTC等の診断情報をNVMへ保存 → ECU再起動時にNVMから復元
+- （将来）通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection → DTC
+
+詳細な入出力・期待結果は、着手時に docs/scenarios.md として整理する（未着手）。
 
 ## 保留中の候補
 
 Phase9着手後に何を実装するかの候補一覧。順序は現時点の見立てであり固定ではない。実装を進める中で「別のテーマが先に必要」と分かった場合は入れ替えてよい。
 
-### 次のPhase候補（学習順序の目安）
+### Phase10以降（ラフな方向性、優先順位は固定ではない）
 
-依存関係を踏まえ、1回のPhaseで新しい概念を1つだけ増やす方針で並べている。
+Phase1〜9のような選定理由・理解目標の詳細設計は、各Phaseの着手直前に行う。ここでは方向性のラベルのみを示す。着手前には必ず、上記の判断順序（①〜④）で本当に必要かを再検討する。
 
-| 順 | テーマ | 選定理由（現時点の見立て） |
+| Phase | テーマ | 目的（1〜2行） |
 | --- | --- | --- |
-| 1 | DTO | 単独ではリファクタリングに留まるが、CAN実装に向けて送信データ構造を整理する前段階と位置づけると動機が生まれる |
-| 2 | Timer | 周期実行を独立モジュールに切り出す。外部境界なしで完結するため、CANより前に済ませる |
-| 3 | Scheduler | Timerの直接の延長 |
-| 4 | CAN | 他ECUとの通信という外部境界が初めて生まれる。DTO（送信データの形）とTimer/Scheduler（送信タイミング）が先に揃っている前提 |
-| 5 | Watchdog | Schedulerが管理する周期処理の生存監視という位置づけが自然なため、Scheduler以降にする |
+| Phase10 | Python自動検証基盤 | Cの単体テストは残したまま、Pythonから`make test`を実行し結果を集計できるようにする |
+| Phase11 | 車両シナリオの定義 | 正常走行／各センサ異常／DTC永続化などの代表シナリオをdocs/scenarios.mdに明文化する |
+| Phase12 | 入力妥当性チェック | センサ・通信からの値を無条件に信用しない設計を導入する（物理的な限界値と故障値を混同しないよう注意） |
+| Phase13 | DTO整理 | モジュール間・将来のCAN通信でやり取りする車両データの境界を整理する |
+| Phase14 | Timer | 単純ループから周期処理（10ms/100ms/1s等）を意識した構造へ発展させる |
+| Phase15 | Scheduler | Timerの延長として、ECU内部の周期処理をタスク単位に整理する |
+| Phase16 | NVM強化 | persist.cを発展させ、保存/読み込み失敗・データ破損・デフォルト復旧等への対応を検討する |
+| Phase17 | CAN通信 | 仮想CAN等を使い、ECU単体からECU間通信へ発展させる |
+| Phase18 | CAN異常処理 | Timeout/Invalid Data等の通信故障をFault Detection→DTC→Loggerにつなげる |
+| Phase19 | Watchdog | Schedulerが管理する周期処理の停止検出を導入する |
+| Phase20 | ECU構造への再編成 | 機能が増えて責務の置き場所に迷いが出た段階でフォルダ構成を見直す（先行して変更しない） |
+| Phase21 | 複数ECU | Engine ECUとDiagnostic ECU程度の小規模な協調動作を試す |
+| Phase22 | Fault Injection | 故障を意図的に発生させ、シナリオを再現可能にする |
+| Phase23 | Python結合テスト | Pythonからシナリオを投入し、期待結果と比較する結合テストを整備する |
+| Phase24 | SILS | Python（シナリオ投入・故障注入・結果検証）とC ECUを組み合わせた自動検証を完成させる |
+
+Phase9完了後、上記の中から次に着手するテーマを、判断順序（①〜④）に沿って改めて検討する。
 
 ### 付随テーマ（優先順位未定、随時差し込む）
 
 上記の主な流れとは別に、実装を進める中で必要になったタイミングで差し込むテーマ。
 
 - **Error Handlingの拡張**：Config読み込み失敗・CAN通信失敗など、失敗しうる処理が増えるたびに自然と積み増す
-- **NVMのリアリティ向上**（persist.cへの書き込み回数上限・ウェアレベリング等の制約追加）：Configの永続化が必要になったタイミングで一緒に見直す
 - **State Machineの汎用化**（ignition.cのOFF/ON限定から多値・汎用フレームワークへ）：CANの接続状態管理など、ignition.c以外に状態遷移が要る場面が出たときに一般化する動機が生まれる
 - **診断セッション制御／複数DTC優先度付け**（diag.c/cmd.cの延長、day20.mdの「次回やること」の続き）：いつでも着手できる、優先度低め
 - **テストカバレッジ計測（gcov/lcov）**：テストが一定量たまった節目でまとめて導入

@@ -31,11 +31,11 @@ void ignition_check(const Ignition *ignition) {
         snprintf(line, sizeof(line), "%s -> %s",
                  ignition_state_to_str(ignition->previous),
                  ignition_state_to_str(ignition->current));
-        log_print_tagged("IGN", line);
+        log_print_leveled(LOG_INFO, "IGN", line);
     }
 }
 
 /* 現在のイグニッション状態を1行でコンソールに出力する */
 void ignition_print(const Ignition *ignition) {
-    log_print_tagged("IGN", ignition_state_to_str(ignition->current));
+    log_print_leveled(LOG_INFO, "IGN", ignition_state_to_str(ignition->current));
 }

@@ -10,16 +10,16 @@ void alert_check(const VehicleSensorData *data, const ConfigData *config) {
     if (data->speed > config->alert_speed_max) {
         snprintf(line, sizeof(line), "Speed : %3d km/h  (limit: %d km/h)",
                  data->speed, config->alert_speed_max);
-        log_print_tagged("ALERT", line);
+        log_print_leveled(LOG_WARNING, "ALERT", line);
     }
     if (data->rpm > config->alert_rpm_max) {
         snprintf(line, sizeof(line), "RPM   : %4d       (limit: %d)",
                  data->rpm, config->alert_rpm_max);
-        log_print_tagged("ALERT", line);
+        log_print_leveled(LOG_WARNING, "ALERT", line);
     }
     if (data->temperature > config->alert_temp_max) {
         snprintf(line, sizeof(line), "Temp  : %3d C      (limit: %d C)",
                  data->temperature, config->alert_temp_max);
-        log_print_tagged("ALERT", line);
+        log_print_leveled(LOG_WARNING, "ALERT", line);
     }
 }

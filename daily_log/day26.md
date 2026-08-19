@@ -3,9 +3,7 @@
 ## 実施内容
 
 - `config.txt`を作成し、`./sensor_sim`を実行して、`ALERT_SPEED_MAX`等9個の閾値が実際に`alert_check`/`status_check`の判定に反映されることを確認した。確認後、実行で更新された`dtc_data.txt`を元の内容に復元し、確認用の`config.txt`は一旦削除した
-- `.gitignore`に`config.txt`を追加した（`dtc_data.txt`・`test_config.txt`と同様、実行時に使うローカルファイルとしてgit管理対象外にした）
-- 記録用に`config.txt`を再作成した（確認時と同じ内容）
-- `study_plan.md`にPhase9（Logger拡張：ログレベル）を追加した。選定理由・理解目標・タスク（7項目、未着手）を記載し、「保留中の候補」からLoggerの拡張の行を削除、残り5項目の順番を繰り上げた
+- `study_plan.md`にPhase9（Logger拡張：ログレベル）を追加した。
 
 ## 確認・検証
 

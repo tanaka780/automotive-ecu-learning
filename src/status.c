@@ -36,5 +36,5 @@ void status_print(const SensorStatus *status) {
              level_to_str(status->levels[SENSOR_SPEED]),
              level_to_str(status->levels[SENSOR_RPM]),
              level_to_str(status->levels[SENSOR_TEMP]));
-    log_print_tagged("STATUS", line);
+    log_print_leveled(LOG_INFO, "STATUS", line);
 }
