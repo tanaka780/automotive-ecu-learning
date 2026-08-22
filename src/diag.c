@@ -72,7 +72,7 @@ void diag_clear_sensor(DtcRecord *dtc, SensorId sensor) {
     log_print_leveled(LOG_INFO, "DTC", line);
 }
 
-/* センサ種別から表示名を返す（diag_print専用の表示ヘルパー） */
+/* センサ種別から表示名を返す（diag_print・diag_clear_sensorの表示ヘルパー） */
 static const char *sensor_name(SensorId sensor) {
     switch (sensor) {
         case SENSOR_SPEED: return "Speed";

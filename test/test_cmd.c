@@ -132,6 +132,20 @@ static void test_dispatch_clear_extra_token_does_not_clear(void) {
     test_check("余分なトークンがあるとSpeedの発生回数が変化しない(1のまま)", dtc.entries[SENSOR_SPEED].count == 1);
 }
 
+/* cmd_dispatchが前後に空白の付いた入力("clear"の前・後ろ)をトリムせず、
+   完全一致しないものとしてDTC記録を変更しないことを確認する */
+static void test_dispatch_surrounding_space_does_not_clear(void) {
+    DtcRecord dtc;
+    diag_init(&dtc);
+    test_feed(&dtc, 101, 2000, 50);
+
+    cmd_dispatch(" clear", &dtc);
+    test_check("先頭に空白があるとSpeedの発生回数が変化しない(1のまま)", dtc.entries[SENSOR_SPEED].count == 1);
+
+    cmd_dispatch("clear ", &dtc);
+    test_check("末尾に空白があるとSpeedの発生回数が変化しない(1のまま)", dtc.entries[SENSOR_SPEED].count == 1);
+}
+
 int main(void) {
     test_diag_clear_resets_record();
     test_dispatch_clear_command();
@@ -143,6 +157,7 @@ int main(void) {
     test_dispatch_clear_scoped_command();
     test_dispatch_clear_invalid_target_does_not_clear();
     test_dispatch_clear_extra_token_does_not_clear();
+    test_dispatch_surrounding_space_does_not_clear();
 
     return test_summary();
 }
