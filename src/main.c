@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdbool.h>  /* bool を使うために必要 */
 #include <stdlib.h>   /* srand(), rand() */
 #include <time.h>     /* time() */
 #include <unistd.h>   /* sleep() */
@@ -12,6 +13,7 @@
 #include "persist.h"
 #include "cmd.h"
 #include "config.h"
+#include "fixture.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -22,6 +24,8 @@ int main(void) {
 
     VehicleSensorData sensor_data;   /* センサ値（各サンプルごとに上書き更新） */
     sensor_init(&sensor_data);
+    /* fixture.txtがあればセンサ値を固定値に差し替える。trueならループ内でsensor_updateを呼ばない */
+    bool fixture_fixed = fixture_apply(&sensor_data, FIXTURE_FILENAME);
 
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
@@ -52,7 +56,9 @@ int main(void) {
 
         /* OFF中はECU自体が通電していない状態を再現し、センサ更新以降の処理を全てスキップする */
         if (ignition.current == IGNITION_ON) {
-            sensor_update(&sensor_data);                  /* センサ値を更新する (書く) */
+            if (!fixture_fixed) {
+                sensor_update(&sensor_data);              /* 固定値注入が無ければセンサ値を更新する (書く) */
+            }
             sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
             status_check(&sensor_status, &sensor_data, &config); /* 状態レベルを判定する */
             status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
