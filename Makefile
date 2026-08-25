@@ -49,6 +49,11 @@ TEST_CMD_TARGET = test_cmd
 TEST_CONFIG_SRCS = test/test_config.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c
 TEST_CONFIG_TARGET = test_config
 
+# fixture.c の動作確認用テスト（fixture_applyのファイルパースの正常系・異常系の確認、main.c は使わない）
+# test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める。sensor_initを使うため sensor.c も含める
+TEST_FIXTURE_SRCS = test/test_fixture.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/sensor.c src/fixture.c
+TEST_FIXTURE_TARGET = test_fixture
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -78,12 +83,15 @@ $(TEST_CMD_TARGET): $(TEST_CMD_SRCS)
 $(TEST_CONFIG_TARGET): $(TEST_CONFIG_SRCS)
 	$(CC) $(CFLAGS) $(TEST_CONFIG_SRCS) -o $(TEST_CONFIG_TARGET)
 
+$(TEST_FIXTURE_TARGET): $(TEST_FIXTURE_SRCS)
+	$(CC) $(CFLAGS) $(TEST_FIXTURE_SRCS) -o $(TEST_FIXTURE_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_configをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixtureをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -91,7 +99,8 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_IGNITION_TARGET)
 	./$(TEST_CMD_TARGET)
 	./$(TEST_CONFIG_TARGET)
+	./$(TEST_FIXTURE_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET)

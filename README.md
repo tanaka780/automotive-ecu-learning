@@ -45,7 +45,7 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 make clean && make && make run
 ```
 
-テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c・config.c の動作確認、固定値データ使用）:
+テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c・config.c・fixture.c の動作確認、固定値データ使用）:
 
 ```bash
 make test
@@ -69,6 +69,7 @@ make test
 | 診断コマンド | プログラム終了時、イグニッションOFF時のみ`clear`コマンドを入力すると全DTC記録を、`clear <センサ名>`（speed/rpm/temp）を入力すると指定センサ1件分のDTC記録だけをリセットできる（UDS風のDTCクリアの簡易再現）。フリーズフレームは、その原因がクリア対象のセンサと一致する場合だけ合わせてリセットする。イグニッションON時はコマンドを受け付けず、受け付けなかった旨を表示する |
 | 閾値の外部設定 | `config.txt`（`KEY=VALUE`形式）から警告・状態判定の閾値9個を読み込む。ファイルが無ければデフォルト値（`alert.h`/`status.h`のマクロ値）のまま動作する |
 | ログレベル制御 | `config.txt`の`LOG_LEVEL`（0=INFO/1=WARNING/2=ERROR）で実行時のログ表示閾値を切り替える。`ALERT`はWARNING、`PERSIST`の保存失敗・データ破損はERROR、それ以外はINFOとして扱う |
+| センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する |
 
 ---
 
@@ -87,6 +88,7 @@ make test
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
 | `cmd.c` | 標準入力から診断コマンド（`clear`／`clear <センサ名>`相当）を読み込み、解釈してDTC記録のクリア（全体／センサ単位）を要求する。想定外の入力は理由に応じて区別して通知する。イグニッションOFF時のみという受付条件を満たさない場合の通知（`cmd_notify_rejected`）も担う |
 | `config.c` | 閾値9個（alert.c/status.c）とログレベル（`LOG_LEVEL`）の設定値を保持し、`KEY=VALUE`形式の設定ファイルから読み込む（ファイルが無ければデフォルト値のまま）。読み込んだ値はalert.c/status.cの判定、およびlogger.cの表示閾値に反映される |
+| `fixture.c` | `fixture.txt`を`KEY=VALUE`形式で読み込む。`MODE=FIXED`なら`SPEED`/`RPM`/`TEMP`をセンサ値に反映し、`main.c`はそれ以降の`sensor_update`呼び出しをスキップする。`MODE=RANDOM`・ファイル無し・`MODE`未指定の場合は何もせず、従来通りランダムに動作する |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
 | `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
@@ -94,6 +96,7 @@ make test
 | `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する |
 | `test/test_cmd.c` | 固定値データによる `diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ等）の動作確認（`make test`で実行）。標準入力を扱う `cmd_read_line` は対象外（`make run`での実行確認で扱う） |
 | `test/test_config.c` | 固定値データによる `config_load` のファイルパース動作確認（`make test`で実行）。正常系（全9キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、キー重複時は後勝ち）を確認する |
+| `test/test_fixture.c` | 固定値データによる `fixture_apply` のファイルパース動作確認（`make test`で実行）。正常系（`MODE=FIXED`で全キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、キー重複時は後勝ち、`MODE=RANDOM`時はセンサ値を変更しない）を確認する |
 | `test/test_common.c` | test_diag.c / test_persist.c / test_stats.c / test_cmd.c で共通のテスト補助関数（結果判定・サマリ表示）を提供する。サンプル投入用の関数（DtcRecord前提）は test_diag.c / test_persist.c / test_cmd.c のみで使用する。デフォルトの`ConfigData`を返す`test_default_config()`も提供し、test_diag.c・test_alert.c・test_config.cの直接呼び出しからも共有される |
 
 ---
@@ -112,6 +115,7 @@ make test
 | Phase8 | Config（閾値の外部化） | 完了（`config.h`/`config.c`の新規作成、`main.c`への組み込み、`alert.c`/`status.c`への反映、非デフォルトconfigでの判定反映を確認する自動テスト、`test_config.c`によるファイルパースの正常系・異常系テストまで完了） |
 | Phase9 | Logger拡張（ログレベル） | 完了（`LogLevel`と`log_print_leveled`の新設、`ConfigData`への`log_level`追加、`main.c`からの配線、既存ログ呼び出しの`log_print_leveled`への置き換えまで完了。`config.c`自身の読み込み結果ログ2箇所は、表示閾値が確定する前に呼ばれるため対象外とした） |
 | Phase10 | 車両シナリオの定義 | 完了。正常走行／故障発生／診断コマンド（DTCクリア）／電源再投入／設定ファイル異常時のフェイルセーフ（リンプホームモード）／通信故障（将来項目）の6シナリオを`docs/scenarios.md`に整理した |
+| Phase11 | 固定値注入によるシナリオ再現の仕組み構築 | 完了（`fixture.h`/`fixture.c`の新規作成、`main.c`への組み込み、`test/test_fixture.c`による自動テスト、`make run`での動作確認まで完了） |
 
 ---
 
@@ -124,3 +128,4 @@ make test
 - 診断コマンドの受付タイミングはサンプルループ終了後の1回のみで変わっていない。イグニッションOFFへ遷移した瞬間を検出して受け付ける（実際の駐車中スキャンツール接続に近い挙動）わけではなく、ループ終了時点の状態がたまたまOFFかどうかで受付可否が決まる
 - 設定ファイル（config.txt）の値は、数値に変換できればそのまま型に代入しており、意味的に妥当な範囲か（例えば`uint8_t`の範囲を超えていないか）はチェックしていない。`LOG_LEVEL`も同様に0〜2以外の数値を範囲チェックしていない
 - ログレベル（`LOG_LEVEL`）を上げても、`config.c`自身の読み込み結果ログ（設定ファイルの有無・読み込み完了の通知）は常に表示される。表示閾値はそのconfig読み込みの結果として決まるため、config読み込み自体のログをその閾値で制御できない
+- 固定値注入ファイル（fixture.txt）の値も、config.txtと同様に範囲チェックをしていない（型の範囲を超えていないかはチェックしない）。また値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない
