@@ -5,9 +5,9 @@
 #include <stdint.h>  /* uint8_t / uint16_t などの固定幅整数型 */
 
 typedef struct {
-    uint8_t  speed;        /* 車速 [km/h]: 0〜120（停車〜一般道上限相当） */
-    uint16_t rpm;          /* エンジン回転数 [rpm]: 0〜6000（アイドリング〜レッドライン） */
-    uint8_t  temperature;  /* 水温 [℃]: 25〜100（常温〜冷却水沸点） */
+    uint8_t  speed;        /* 車速 [km/h]: 0〜120（停車〜一般道上限相当）。値域チェックの正本はvalidate.h参照 */
+    uint16_t rpm;          /* エンジン回転数 [rpm]: 0〜6000（アイドリング〜レッドライン）。値域チェックの正本はvalidate.h参照 */
+    uint8_t  temperature;  /* 水温 [℃]: 25〜100（常温〜冷却水沸点）。値域チェックの正本はvalidate.h参照 */
 } VehicleSensorData;
 
 /* センサ種別。SensorStatus.levels / DtcRecord.entries の配列インデックスとしても使う */
