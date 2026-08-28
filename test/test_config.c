@@ -66,6 +66,30 @@ static void test_load_ignores_invalid_lines(void) {
           config.status_temp_warn == def->status_temp_warn);
 }
 
+/* 値域外の値は無視され、他の正常な値は反映されることを確認する */
+static void test_load_ignores_out_of_range_values(void) {
+    write_raw(TEST_CONFIG_FILENAME,
+        "ALERT_SPEED_MAX=200\n"
+        "STATUS_TEMP_WARN=10\n"
+        "LOG_LEVEL=5\n"
+        "ALERT_RPM_MAX=6000\n");
+
+    ConfigData config;
+    config_init(&config);
+    bool ok = config_load(&config, TEST_CONFIG_FILENAME);
+
+    const ConfigData *def = test_default_config();
+
+    test_check("値域外の無視: 読み込みは成功する(ファイルは存在する)", ok);
+    test_check("値域外の無視: 正常な行(ALERT_RPM_MAX)は反映される", config.alert_rpm_max == 6000);
+    test_check("値域外の無視: speedの上限(120)を超えるalert_speed_maxはデフォルトのまま",
+          config.alert_speed_max == def->alert_speed_max);
+    test_check("値域外の無視: tempの下限(25)未満のstatus_temp_warnはデフォルトのまま",
+          config.status_temp_warn == def->status_temp_warn);
+    test_check("値域外の無視: LOG_LEVELの範囲(0〜2)外のlog_levelはデフォルトのまま",
+          config.log_level == def->log_level);
+}
+
 /* 同じキーが複数回書かれた場合、後に書かれた値が採用される（後勝ち）ことを確認する */
 static void test_load_duplicate_key_last_wins(void) {
     write_raw(TEST_CONFIG_FILENAME,
@@ -83,6 +107,7 @@ static void test_load_duplicate_key_last_wins(void) {
 int main(void) {
     test_load_all_keys();
     test_load_ignores_invalid_lines();
+    test_load_ignores_out_of_range_values();
     test_load_duplicate_key_last_wins();
 
     remove(TEST_CONFIG_FILENAME);   /* テスト専用ファイルの後片付け */

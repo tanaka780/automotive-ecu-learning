@@ -54,6 +54,11 @@ TEST_CONFIG_TARGET = test_config
 TEST_FIXTURE_SRCS = test/test_fixture.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/sensor.c src/fixture.c src/validate.c
 TEST_FIXTURE_TARGET = test_fixture
 
+# validate.c の動作確認用テスト（値域チェック関数自体の境界値確認、main.c は使わない）
+# test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
+TEST_VALIDATE_SRCS = test/test_validate.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/validate.c
+TEST_VALIDATE_TARGET = test_validate
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -86,12 +91,15 @@ $(TEST_CONFIG_TARGET): $(TEST_CONFIG_SRCS)
 $(TEST_FIXTURE_TARGET): $(TEST_FIXTURE_SRCS)
 	$(CC) $(CFLAGS) $(TEST_FIXTURE_SRCS) -o $(TEST_FIXTURE_TARGET)
 
+$(TEST_VALIDATE_TARGET): $(TEST_VALIDATE_SRCS)
+	$(CC) $(CFLAGS) $(TEST_VALIDATE_SRCS) -o $(TEST_VALIDATE_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixtureをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validateをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -100,7 +108,8 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_CMD_TARGET)
 	./$(TEST_CONFIG_TARGET)
 	./$(TEST_FIXTURE_TARGET)
+	./$(TEST_VALIDATE_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET)

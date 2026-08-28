@@ -54,6 +54,26 @@ static void test_apply_ignores_invalid_lines(void) {
           data.temperature == 25);
 }
 
+/* 値域外の値は無視され、他の正常な値は反映されることを確認する */
+static void test_apply_ignores_out_of_range_values(void) {
+    write_raw(TEST_FIXTURE_FILENAME,
+        "MODE=FIXED\n"
+        "SPEED=200\n"
+        "TEMP=10\n"
+        "RPM=5000\n");
+
+    VehicleSensorData data;
+    sensor_init(&data);   /* speed=0, rpm=800, temperature=25 */
+    bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
+
+    test_check("値域外の無視: 戻り値はtrue(MODE=FIXEDは有効)", ok);
+    test_check("値域外の無視: 正常な行(RPM)は反映される", data.rpm == 5000);
+    test_check("値域外の無視: speedの上限(120)を超える値は反映されずsensor_initの初期値のまま",
+          data.speed == 0);
+    test_check("値域外の無視: tempの下限(25)未満の値は反映されずsensor_initの初期値のまま",
+          data.temperature == 25);
+}
+
 /* 同じキーが複数回書かれた場合、後に書かれた値が採用される（後勝ち）ことを確認する */
 static void test_apply_duplicate_key_last_wins(void) {
     write_raw(TEST_FIXTURE_FILENAME,
@@ -90,6 +110,7 @@ static void test_apply_mode_random(void) {
 int main(void) {
     test_apply_all_keys();
     test_apply_ignores_invalid_lines();
+    test_apply_ignores_out_of_range_values();
     test_apply_duplicate_key_last_wins();
     test_apply_mode_random();
 

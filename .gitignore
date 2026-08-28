@@ -8,7 +8,11 @@ test_alert
 test_ignition
 test_cmd
 test_config
+test_fixture
+test_validate
 dtc_data.txt
 test_dtc_data.txt
 test_config.txt
 config.txt
+fixture.txt
+test_fixture.txt
