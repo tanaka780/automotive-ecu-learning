@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>   /* dup, dup2, close, STDOUT_FILENO */
+#include "unity.h"
 #include "ignition.h"
-#include "test_common.h"
+
+void setUp(void) {}
+void tearDown(void) {}
 
 /* ignition_checkの標準出力キャプチャ専用の一時ファイル（本番データとは無関係） */
 #define CAPTURE_FILENAME "test_ignition_capture.txt"
@@ -48,7 +51,7 @@ static void test_no_event_off_to_off(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_ignition_check(&ign, buf, sizeof(buf));
 
-    test_check("OFF->OFF: 出力なし", strlen(buf) == 0);
+    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) == 0, "OFF->OFF: 出力なし");
 }
 
 /* ON→ON（遷移なし）では何も出力されないことを確認する */
@@ -60,7 +63,7 @@ static void test_no_event_on_to_on(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_ignition_check(&ign, buf, sizeof(buf));
 
-    test_check("ON->ON: 出力なし", strlen(buf) == 0);
+    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) == 0, "ON->ON: 出力なし");
 }
 
 /* OFF→ON（遷移あり）で遷移イベントが出力されることを確認する */
@@ -72,7 +75,7 @@ static void test_event_off_to_on(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_ignition_check(&ign, buf, sizeof(buf));
 
-    test_check("OFF->ON: [IGN] OFF -> ON が出力される", strstr(buf, "[IGN] OFF -> ON") != NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[IGN] OFF -> ON") != NULL, "OFF->ON: [IGN] OFF -> ON が出力される");
 }
 
 /* ON→OFF（遷移あり）で遷移イベントが出力されることを確認する */
@@ -84,14 +87,16 @@ static void test_event_on_to_off(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_ignition_check(&ign, buf, sizeof(buf));
 
-    test_check("ON->OFF: [IGN] ON -> OFF が出力される", strstr(buf, "[IGN] ON -> OFF") != NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[IGN] ON -> OFF") != NULL, "ON->OFF: [IGN] ON -> OFF が出力される");
 }
 
 int main(void) {
-    test_no_event_off_to_off();
-    test_no_event_on_to_on();
-    test_event_off_to_on();
-    test_event_on_to_off();
+    UNITY_BEGIN();
 
-    return test_summary();
+    RUN_TEST(test_no_event_off_to_off);
+    RUN_TEST(test_no_event_on_to_on);
+    RUN_TEST(test_event_off_to_on);
+    RUN_TEST(test_event_on_to_off);
+
+    return UNITY_END();
 }

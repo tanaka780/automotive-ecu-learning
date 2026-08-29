@@ -1,6 +1,10 @@
 #include <stdio.h>
+#include "unity.h"
 #include "config.h"
 #include "test_common.h"
+
+void setUp(void) {}
+void tearDown(void) {}
 
 /* 本番のconfig.txtを壊さないよう、テスト専用のファイル名を使う */
 #define TEST_CONFIG_FILENAME "test_config.txt"
@@ -32,16 +36,16 @@ static void test_load_all_keys(void) {
     config_init(&config);
     bool ok = config_load(&config, TEST_CONFIG_FILENAME);
 
-    test_check("全キー読み込み: 読み込みは成功する", ok);
-    test_check("全キー読み込み: alert_speed_maxが反映される", config.alert_speed_max == 90);
-    test_check("全キー読み込み: alert_rpm_maxが反映される", config.alert_rpm_max == 5500);
-    test_check("全キー読み込み: alert_temp_maxが反映される", config.alert_temp_max == 95);
-    test_check("全キー読み込み: status_speed_warnが反映される", config.status_speed_warn == 70);
-    test_check("全キー読み込み: status_speed_critが反映される", config.status_speed_crit == 90);
-    test_check("全キー読み込み: status_rpm_warnが反映される", config.status_rpm_warn == 4500);
-    test_check("全キー読み込み: status_rpm_critが反映される", config.status_rpm_crit == 5500);
-    test_check("全キー読み込み: status_temp_warnが反映される", config.status_temp_warn == 85);
-    test_check("全キー読み込み: status_temp_critが反映される", config.status_temp_crit == 95);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "全キー読み込み: 読み込みは成功する");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_speed_max == 90, "全キー読み込み: alert_speed_maxが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_rpm_max == 5500, "全キー読み込み: alert_rpm_maxが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_temp_max == 95, "全キー読み込み: alert_temp_maxが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_speed_warn == 70, "全キー読み込み: status_speed_warnが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_speed_crit == 90, "全キー読み込み: status_speed_critが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_rpm_warn == 4500, "全キー読み込み: status_rpm_warnが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_rpm_crit == 5500, "全キー読み込み: status_rpm_critが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_temp_warn == 85, "全キー読み込み: status_temp_warnが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_temp_crit == 95, "全キー読み込み: status_temp_critが反映される");
 }
 
 /* 未知のキー・値欠落・数値以外の行は無視され、正常な行だけが反映されることを確認する */
@@ -58,12 +62,12 @@ static void test_load_ignores_invalid_lines(void) {
 
     const ConfigData *def = test_default_config();
 
-    test_check("不正行の無視: 読み込みは成功する(ファイルは存在する)", ok);
-    test_check("不正行の無視: 正常な行(ALERT_RPM_MAX)は反映される", config.alert_rpm_max == 6000);
-    test_check("不正行の無視: 値欠落の行の影響を受けずalert_speed_maxはデフォルトのまま",
-          config.alert_speed_max == def->alert_speed_max);
-    test_check("不正行の無視: 数値以外の行の影響を受けずstatus_temp_warnはデフォルトのまま",
-          config.status_temp_warn == def->status_temp_warn);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "不正行の無視: 読み込みは成功する(ファイルは存在する)");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_rpm_max == 6000, "不正行の無視: 正常な行(ALERT_RPM_MAX)は反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_speed_max == def->alert_speed_max,
+          "不正行の無視: 値欠落の行の影響を受けずalert_speed_maxはデフォルトのまま");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_temp_warn == def->status_temp_warn,
+          "不正行の無視: 数値以外の行の影響を受けずstatus_temp_warnはデフォルトのまま");
 }
 
 /* 値域外の値は無視され、他の正常な値は反映されることを確認する */
@@ -80,14 +84,14 @@ static void test_load_ignores_out_of_range_values(void) {
 
     const ConfigData *def = test_default_config();
 
-    test_check("値域外の無視: 読み込みは成功する(ファイルは存在する)", ok);
-    test_check("値域外の無視: 正常な行(ALERT_RPM_MAX)は反映される", config.alert_rpm_max == 6000);
-    test_check("値域外の無視: speedの上限(120)を超えるalert_speed_maxはデフォルトのまま",
-          config.alert_speed_max == def->alert_speed_max);
-    test_check("値域外の無視: tempの下限(25)未満のstatus_temp_warnはデフォルトのまま",
-          config.status_temp_warn == def->status_temp_warn);
-    test_check("値域外の無視: LOG_LEVELの範囲(0〜2)外のlog_levelはデフォルトのまま",
-          config.log_level == def->log_level);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "値域外の無視: 読み込みは成功する(ファイルは存在する)");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_rpm_max == 6000, "値域外の無視: 正常な行(ALERT_RPM_MAX)は反映される");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_speed_max == def->alert_speed_max,
+          "値域外の無視: speedの上限(120)を超えるalert_speed_maxはデフォルトのまま");
+    TEST_ASSERT_TRUE_MESSAGE(config.status_temp_warn == def->status_temp_warn,
+          "値域外の無視: tempの下限(25)未満のstatus_temp_warnはデフォルトのまま");
+    TEST_ASSERT_TRUE_MESSAGE(config.log_level == def->log_level,
+          "値域外の無視: LOG_LEVELの範囲(0〜2)外のlog_levelはデフォルトのまま");
 }
 
 /* 同じキーが複数回書かれた場合、後に書かれた値が採用される（後勝ち）ことを確認する */
@@ -100,17 +104,19 @@ static void test_load_duplicate_key_last_wins(void) {
     config_init(&config);
     bool ok = config_load(&config, TEST_CONFIG_FILENAME);
 
-    test_check("キー重複: 読み込みは成功する", ok);
-    test_check("キー重複: 後に書かれた値が採用される(後勝ち)", config.alert_speed_max == 120);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "キー重複: 読み込みは成功する");
+    TEST_ASSERT_TRUE_MESSAGE(config.alert_speed_max == 120, "キー重複: 後に書かれた値が採用される(後勝ち)");
 }
 
 int main(void) {
-    test_load_all_keys();
-    test_load_ignores_invalid_lines();
-    test_load_ignores_out_of_range_values();
-    test_load_duplicate_key_last_wins();
+    UNITY_BEGIN();
 
+    RUN_TEST(test_load_all_keys);
+    RUN_TEST(test_load_ignores_invalid_lines);
+    RUN_TEST(test_load_ignores_out_of_range_values);
+    RUN_TEST(test_load_duplicate_key_last_wins);
+
+    int result = UNITY_END();
     remove(TEST_CONFIG_FILENAME);   /* テスト専用ファイルの後片付け */
-
-    return test_summary();
+    return result;
 }

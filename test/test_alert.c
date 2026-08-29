@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>   /* dup, dup2, close, STDOUT_FILENO */
+#include "unity.h"
 #include "sensor.h"
 #include "alert.h"
 #include "test_common.h"
+
+void setUp(void) {}
+void tearDown(void) {}
 
 /* alert_checkの標準出力キャプチャ専用の一時ファイル（本番データとは無関係） */
 #define CAPTURE_FILENAME "test_alert_capture.txt"
@@ -50,7 +54,7 @@ static void test_no_alert_at_boundary(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, test_default_config(), buf, sizeof(buf));
 
-    test_check("境界値ちょうどでは警告が出ない", strlen(buf) == 0);
+    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) == 0, "境界値ちょうどでは警告が出ない");
 }
 
 /* speedのみ閾値超過のとき、Speedの警告だけが出ることを確認する */
@@ -63,9 +67,9 @@ static void test_alert_speed_only(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, test_default_config(), buf, sizeof(buf));
 
-    test_check("speed超過: [ALERT] Speedが出力される", strstr(buf, "[ALERT] Speed") != NULL);
-    test_check("speedのみ超過: RPMは出力されない", strstr(buf, "[ALERT] RPM") == NULL);
-    test_check("speedのみ超過: Tempは出力されない", strstr(buf, "[ALERT] Temp") == NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Speed") != NULL, "speed超過: [ALERT] Speedが出力される");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] RPM") == NULL, "speedのみ超過: RPMは出力されない");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Temp") == NULL, "speedのみ超過: Tempは出力されない");
 }
 
 /* rpmのみ閾値超過のとき、RPMの警告だけが出ることを確認する */
@@ -78,9 +82,9 @@ static void test_alert_rpm_only(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, test_default_config(), buf, sizeof(buf));
 
-    test_check("rpm超過: [ALERT] RPMが出力される", strstr(buf, "[ALERT] RPM") != NULL);
-    test_check("rpmのみ超過: Speedは出力されない", strstr(buf, "[ALERT] Speed") == NULL);
-    test_check("rpmのみ超過: Tempは出力されない", strstr(buf, "[ALERT] Temp") == NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] RPM") != NULL, "rpm超過: [ALERT] RPMが出力される");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Speed") == NULL, "rpmのみ超過: Speedは出力されない");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Temp") == NULL, "rpmのみ超過: Tempは出力されない");
 }
 
 /* temperatureのみ閾値超過のとき、Tempの警告だけが出ることを確認する */
@@ -93,9 +97,9 @@ static void test_alert_temp_only(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, test_default_config(), buf, sizeof(buf));
 
-    test_check("temp超過: [ALERT] Tempが出力される", strstr(buf, "[ALERT] Temp") != NULL);
-    test_check("tempのみ超過: Speedは出力されない", strstr(buf, "[ALERT] Speed") == NULL);
-    test_check("tempのみ超過: RPMは出力されない", strstr(buf, "[ALERT] RPM") == NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Temp") != NULL, "temp超過: [ALERT] Tempが出力される");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Speed") == NULL, "tempのみ超過: Speedは出力されない");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] RPM") == NULL, "tempのみ超過: RPMは出力されない");
 }
 
 /* 3項目同時に閾値超過のとき、3件とも警告が出ることを確認する */
@@ -108,9 +112,9 @@ static void test_alert_all_three(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, test_default_config(), buf, sizeof(buf));
 
-    test_check("3項目超過: Speedが出力される", strstr(buf, "[ALERT] Speed") != NULL);
-    test_check("3項目超過: RPMが出力される", strstr(buf, "[ALERT] RPM") != NULL);
-    test_check("3項目超過: Tempが出力される", strstr(buf, "[ALERT] Temp") != NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Speed") != NULL, "3項目超過: Speedが出力される");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] RPM") != NULL, "3項目超過: RPMが出力される");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Temp") != NULL, "3項目超過: Tempが出力される");
 }
 
 /* 非デフォルトのConfigDataを渡すと、閾値を下げた項目は新しい閾値で警告が出て、
@@ -128,18 +132,20 @@ static void test_alert_reflects_custom_config(void) {
     char buf[CAPTURE_BUF_SIZE];
     capture_alert_check(&d, &cfg, buf, sizeof(buf));
 
-    test_check("非デフォルトconfig: 閾値を下げたSpeedは警告が出る", strstr(buf, "[ALERT] Speed") != NULL);
-    test_check("非デフォルトconfig: 閾値を上げたRPMは警告が出ない", strstr(buf, "[ALERT] RPM") == NULL);
-    test_check("非デフォルトconfig: 変更していないTempは警告が出ない", strstr(buf, "[ALERT] Temp") == NULL);
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Speed") != NULL, "非デフォルトconfig: 閾値を下げたSpeedは警告が出る");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] RPM") == NULL, "非デフォルトconfig: 閾値を上げたRPMは警告が出ない");
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[ALERT] Temp") == NULL, "非デフォルトconfig: 変更していないTempは警告が出ない");
 }
 
 int main(void) {
-    test_no_alert_at_boundary();
-    test_alert_speed_only();
-    test_alert_rpm_only();
-    test_alert_temp_only();
-    test_alert_all_three();
-    test_alert_reflects_custom_config();
+    UNITY_BEGIN();
 
-    return test_summary();
+    RUN_TEST(test_no_alert_at_boundary);
+    RUN_TEST(test_alert_speed_only);
+    RUN_TEST(test_alert_rpm_only);
+    RUN_TEST(test_alert_temp_only);
+    RUN_TEST(test_alert_all_three);
+    RUN_TEST(test_alert_reflects_custom_config);
+
+    return UNITY_END();
 }

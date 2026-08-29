@@ -1,6 +1,10 @@
 #include <stdio.h>
+#include "unity.h"
+#include "sensor.h"
 #include "fixture.h"
-#include "test_common.h"
+
+void setUp(void) {}
+void tearDown(void) {}
 
 /* 本番のfixture.txtを壊さないよう、テスト専用のファイル名を使う */
 #define TEST_FIXTURE_FILENAME "test_fixture.txt"
@@ -27,10 +31,10 @@ static void test_apply_all_keys(void) {
     sensor_init(&data);
     bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
 
-    test_check("全キー反映: 戻り値はtrue(固定値を反映)", ok);
-    test_check("全キー反映: speedが反映される", data.speed == 110);
-    test_check("全キー反映: rpmが反映される", data.rpm == 5500);
-    test_check("全キー反映: temperatureが反映される", data.temperature == 95);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "全キー反映: 戻り値はtrue(固定値を反映)");
+    TEST_ASSERT_TRUE_MESSAGE(data.speed == 110, "全キー反映: speedが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(data.rpm == 5500, "全キー反映: rpmが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(data.temperature == 95, "全キー反映: temperatureが反映される");
 }
 
 /* 未知のキー・値欠落・数値以外の行は無視され、正常な行だけが反映されることを確認する */
@@ -46,12 +50,10 @@ static void test_apply_ignores_invalid_lines(void) {
     sensor_init(&data);   /* speed=0, rpm=800, temperature=25 */
     bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
 
-    test_check("不正行の無視: 戻り値はtrue(MODE=FIXEDは有効)", ok);
-    test_check("不正行の無視: 正常な行(RPM)は反映される", data.rpm == 5000);
-    test_check("不正行の無視: 値欠落の行の影響を受けずspeedはsensor_initの初期値のまま",
-          data.speed == 0);
-    test_check("不正行の無視: 数値以外の行の影響を受けずtemperatureはsensor_initの初期値のまま",
-          data.temperature == 25);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "不正行の無視: 戻り値はtrue(MODE=FIXEDは有効)");
+    TEST_ASSERT_TRUE_MESSAGE(data.rpm == 5000, "不正行の無視: 正常な行(RPM)は反映される");
+    TEST_ASSERT_TRUE_MESSAGE(data.speed == 0, "不正行の無視: 値欠落の行の影響を受けずspeedはsensor_initの初期値のまま");
+    TEST_ASSERT_TRUE_MESSAGE(data.temperature == 25, "不正行の無視: 数値以外の行の影響を受けずtemperatureはsensor_initの初期値のまま");
 }
 
 /* 値域外の値は無視され、他の正常な値は反映されることを確認する */
@@ -66,12 +68,10 @@ static void test_apply_ignores_out_of_range_values(void) {
     sensor_init(&data);   /* speed=0, rpm=800, temperature=25 */
     bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
 
-    test_check("値域外の無視: 戻り値はtrue(MODE=FIXEDは有効)", ok);
-    test_check("値域外の無視: 正常な行(RPM)は反映される", data.rpm == 5000);
-    test_check("値域外の無視: speedの上限(120)を超える値は反映されずsensor_initの初期値のまま",
-          data.speed == 0);
-    test_check("値域外の無視: tempの下限(25)未満の値は反映されずsensor_initの初期値のまま",
-          data.temperature == 25);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "値域外の無視: 戻り値はtrue(MODE=FIXEDは有効)");
+    TEST_ASSERT_TRUE_MESSAGE(data.rpm == 5000, "値域外の無視: 正常な行(RPM)は反映される");
+    TEST_ASSERT_TRUE_MESSAGE(data.speed == 0, "値域外の無視: speedの上限(120)を超える値は反映されずsensor_initの初期値のまま");
+    TEST_ASSERT_TRUE_MESSAGE(data.temperature == 25, "値域外の無視: tempの下限(25)未満の値は反映されずsensor_initの初期値のまま");
 }
 
 /* 同じキーが複数回書かれた場合、後に書かれた値が採用される（後勝ち）ことを確認する */
@@ -85,8 +85,8 @@ static void test_apply_duplicate_key_last_wins(void) {
     sensor_init(&data);
     bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
 
-    test_check("キー重複: 戻り値はtrue", ok);
-    test_check("キー重複: 後に書かれた値が採用される(後勝ち)", data.speed == 120);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "キー重複: 戻り値はtrue");
+    TEST_ASSERT_TRUE_MESSAGE(data.speed == 120, "キー重複: 後に書かれた値が採用される(後勝ち)");
 }
 
 /* MODE=RANDOMの場合、戻り値がfalseになりデータが変更されないことを確認する */
@@ -101,20 +101,22 @@ static void test_apply_mode_random(void) {
     data.temperature = 42;
     bool ok = fixture_apply(&data, TEST_FIXTURE_FILENAME);
 
-    test_check("MODE=RANDOM: 戻り値はfalse", !ok);
-    test_check("MODE=RANDOM: speedはsentinel値のまま変更されない", data.speed == 42);
-    test_check("MODE=RANDOM: rpmはsentinel値のまま変更されない", data.rpm == 4242);
-    test_check("MODE=RANDOM: temperatureはsentinel値のまま変更されない", data.temperature == 42);
+    TEST_ASSERT_FALSE_MESSAGE(ok, "MODE=RANDOM: 戻り値はfalse");
+    TEST_ASSERT_TRUE_MESSAGE(data.speed == 42, "MODE=RANDOM: speedはsentinel値のまま変更されない");
+    TEST_ASSERT_TRUE_MESSAGE(data.rpm == 4242, "MODE=RANDOM: rpmはsentinel値のまま変更されない");
+    TEST_ASSERT_TRUE_MESSAGE(data.temperature == 42, "MODE=RANDOM: temperatureはsentinel値のまま変更されない");
 }
 
 int main(void) {
-    test_apply_all_keys();
-    test_apply_ignores_invalid_lines();
-    test_apply_ignores_out_of_range_values();
-    test_apply_duplicate_key_last_wins();
-    test_apply_mode_random();
+    UNITY_BEGIN();
 
+    RUN_TEST(test_apply_all_keys);
+    RUN_TEST(test_apply_ignores_invalid_lines);
+    RUN_TEST(test_apply_ignores_out_of_range_values);
+    RUN_TEST(test_apply_duplicate_key_last_wins);
+    RUN_TEST(test_apply_mode_random);
+
+    int result = UNITY_END();
     remove(TEST_FIXTURE_FILENAME);   /* テスト専用ファイルの後片付け */
-
-    return test_summary();
+    return result;
 }
