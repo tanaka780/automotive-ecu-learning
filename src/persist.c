@@ -59,7 +59,8 @@ static bool text_to_dtc(const char *text, DtcRecord *dtc) {
     dtc->freeze_frame.data.rpm         = (uint16_t)values[9];
     dtc->freeze_frame.data.temperature = (uint8_t)values[10];
 
-    for (int i = 0; i < SENSOR_COUNT; i++) {
+    /* SENSOR_COUNTはenum定数のため、int（i）との比較にはキャストが必要（MISRA 10.4） */
+    for (int i = 0; i < (int)SENSOR_COUNT; i++) {
         dtc->previous.levels[i] = LEVEL_NORMAL;
     }
 
@@ -85,7 +86,8 @@ static bool read_text_from_file(const char *filename, char *buf, size_t bufsize)
         return false;   /* 初回起動などでファイルが無い場合はここに来る */
     }
 
-    size_t len = fread(buf, 1, bufsize - 1, fp);
+    /* bufsizeはsize_t（符号なし）のため、引く数値も符号なしリテラルにする（MISRA 10.4） */
+    size_t len = fread(buf, 1, bufsize - 1U, fp);
     buf[len] = '\0';
     fclose(fp);
     return true;

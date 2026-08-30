@@ -7,7 +7,8 @@ static const char *sensor_name(SensorId sensor);
 
 /* DTC記録を初期値（0件、前回状態はNORMAL、状態区分はNONE、フリーズフレーム未記録）にリセットする */
 void diag_init(DtcRecord *dtc) {
-    for (int i = 0; i < SENSOR_COUNT; i++) {
+    /* SENSOR_COUNTはenum定数のため、int（i）との比較にはキャストが必要（MISRA 10.4） */
+    for (int i = 0; i < (int)SENSOR_COUNT; i++) {
         dtc->entries[i].sensor  = (SensorId)i;
         dtc->entries[i].count   = 0;
         dtc->entries[i].status  = DTC_NONE;
@@ -25,7 +26,7 @@ void diag_init(DtcRecord *dtc) {
    現在CRITICAL中ならACTIVE、CRITICALから外れたらHISTORYに遷移させる。
    最初のエッジでフリーズフレーム（車両状態のスナップショット）を1件だけ記録する */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data) {
-    for (int i = 0; i < SENSOR_COUNT; i++) {
+    for (int i = 0; i < (int)SENSOR_COUNT; i++) {
         if (status->levels[i] == LEVEL_CRITICAL) {
             if (dtc->previous.levels[i] != LEVEL_CRITICAL) {
                 dtc->entries[i].count++;
@@ -39,6 +40,8 @@ void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorD
             dtc->entries[i].status = DTC_ACTIVE;
         } else if (dtc->entries[i].status == DTC_ACTIVE) {
             dtc->entries[i].status = DTC_HISTORY;
+        } else {
+            /* CRITICALでもACTIVEでもない場合（NONE、またはHISTORY継続）は何もしない */
         }
     }
 
@@ -97,7 +100,7 @@ void diag_print(const DtcRecord *dtc) {
     /* Freeze Frame最悪ケース(64文字)に余裕を持たせたサイズ。他モジュールの64との慣習を保つため2のべき乗にする */
     char line[128];
 
-    for (int i = 0; i < SENSOR_COUNT; i++) {
+    for (int i = 0; i < (int)SENSOR_COUNT; i++) {
         snprintf(line, sizeof(line), "%-6s%-8s CRITICAL occurrences: %d",
                  sensor_name(dtc->entries[i].sensor),
                  dtc_status_to_str(dtc->entries[i].status),

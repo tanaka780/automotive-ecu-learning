@@ -121,6 +121,7 @@ make test
 | Phase11 | 固定値注入によるシナリオ再現の仕組み構築 | 完了（`fixture.h`/`fixture.c`の新規作成、`main.c`への組み込み、`test/test_fixture.c`による自動テスト、`make run`での動作確認まで完了） |
 | Phase12 | 入力妥当性チェック（Guard Clause） | 完了（`validate.h`/`validate.c`の新規作成、config.c/fixture.cへの組み込み、`test/test_validate.c`による自動テスト、`test_config.c`/`test_fixture.c`への値域外ケース追加、`make run`での実行確認まで完了） |
 | Phase13 | Unity試用 | 完了（`test/test_validate.c`を対象に自作`test_common.c`パターンと比較した上でUnity採用を決定し、既存9テストターゲット全てをUnity形式（`vendor/unity/`、公式ThrowTheSwitch/Unityより取得）に移行した。検証しているテスト内容自体は変更していない） |
+| Phase14 | MISRA対応 | 着手中。cppcheckのMISRA C:2012アドオンで検出した12ルールを、判断の軽いものから段階的に対処する方針で進行中。グループ1（5.9識別子重複・8.9ブロックスコープ・10.4/10.8本質的な型・15.6複合文・15.7終端else、計6ルール）を解消済み。残るグループ2（17.7戻り値未使用）・グループ3（21.6/21.10標準ライブラリ制限・12.1括弧の明示・15.5単一出口）は未着手。いずれも動作・出力は変更していない |
 
 ---
 

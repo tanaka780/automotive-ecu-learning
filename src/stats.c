@@ -22,16 +22,28 @@ void stats_init(VehicleStats *stats) {
 
 /* 今回のサンプル値で min / max / sum と count を更新する */
 void stats_update(VehicleStats *stats, const VehicleSensorData *data) {
-    if (data->speed < stats->speed_min) stats->speed_min = data->speed;
-    if (data->speed > stats->speed_max) stats->speed_max = data->speed;
+    if (data->speed < stats->speed_min) {
+        stats->speed_min = data->speed;
+    }
+    if (data->speed > stats->speed_max) {
+        stats->speed_max = data->speed;
+    }
     stats->speed_sum += data->speed;
 
-    if (data->rpm < stats->rpm_min) stats->rpm_min = data->rpm;
-    if (data->rpm > stats->rpm_max) stats->rpm_max = data->rpm;
+    if (data->rpm < stats->rpm_min) {
+        stats->rpm_min = data->rpm;
+    }
+    if (data->rpm > stats->rpm_max) {
+        stats->rpm_max = data->rpm;
+    }
     stats->rpm_sum += data->rpm;
 
-    if (data->temperature < stats->temp_min) stats->temp_min = data->temperature;
-    if (data->temperature > stats->temp_max) stats->temp_max = data->temperature;
+    if (data->temperature < stats->temp_min) {
+        stats->temp_min = data->temperature;
+    }
+    if (data->temperature > stats->temp_max) {
+        stats->temp_max = data->temperature;
+    }
     stats->temp_sum += data->temperature;
 
     stats->count++;
@@ -39,7 +51,8 @@ void stats_update(VehicleStats *stats, const VehicleSensorData *data) {
 
 /* count == 0 のとき sum / count は未定義動作になるため事前にチェックする */
 void stats_print(const VehicleStats *stats) {
-    if (stats->count == 0) {
+    /* countはuint8_tのため、比較対象の0もunsignedとして明示する（MISRA 10.4） */
+    if (stats->count == 0U) {
         log_print("No data");
         return;
     }
@@ -51,18 +64,19 @@ void stats_print(const VehicleStats *stats) {
     snprintf(line, sizeof(line), "--- Stats (%d samples) ---", (int)stats->count);
     log_print(line);
 
+    /* 複合式（除算）を直接キャストせず、一旦変数で受けてからキャストする（MISRA 10.8） */
+    uint16_t speed_avg = stats->speed_sum / stats->count;
     snprintf(line, sizeof(line), "Speed: min=%3d  max=%3d  avg=%3d km/h",
-             (int)stats->speed_min, (int)stats->speed_max,
-             (int)(stats->speed_sum / stats->count));
+             (int)stats->speed_min, (int)stats->speed_max, (int)speed_avg);
     log_print(line);
 
+    uint32_t rpm_avg = stats->rpm_sum / stats->count;
     snprintf(line, sizeof(line), "RPM  : min=%4d  max=%4d  avg=%4d",
-             (int)stats->rpm_min, (int)stats->rpm_max,
-             (int)(stats->rpm_sum / stats->count));
+             (int)stats->rpm_min, (int)stats->rpm_max, (int)rpm_avg);
     log_print(line);
 
+    uint16_t temp_avg = stats->temp_sum / stats->count;
     snprintf(line, sizeof(line), "Temp : min=%3d  max=%3d  avg=%3d C",
-             (int)stats->temp_min, (int)stats->temp_max,
-             (int)(stats->temp_sum / stats->count));
+             (int)stats->temp_min, (int)stats->temp_max, (int)temp_avg);
     log_print(line);
 }

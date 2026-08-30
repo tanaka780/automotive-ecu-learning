@@ -28,7 +28,8 @@ void config_init(ConfigData *config) {
    値域チェックはvalidate_in_range/validate_log_level（validate.h）が持つ物理的な値域を基準にする。
    int型のvalueのまま検証してからuint8_t/uint16_tへキャストすることで、キャストによる
    オーバーフロー（例: 999が231に化ける等）が起きる前に不正な値をはじく */
-static void apply_line(ConfigData *config, const char *line) {
+/* fixture.cにも同名のstatic関数があり、識別子が別ファイルで重複しないよう関数名にモジュール名を付ける（MISRA 5.9） */
+static void config_apply_line(ConfigData *config, const char *line) {
     char key[CONFIG_LINE_SIZE];
     int value;
 
@@ -37,28 +38,49 @@ static void apply_line(ConfigData *config, const char *line) {
     }
 
     if (strcmp(key, "ALERT_SPEED_MAX") == 0) {
-        if (validate_in_range(SENSOR_SPEED, value)) config->alert_speed_max = (uint8_t)value;
+        if (validate_in_range(SENSOR_SPEED, value)) {
+            config->alert_speed_max = (uint8_t)value;
+        }
     } else if (strcmp(key, "ALERT_RPM_MAX") == 0) {
-        if (validate_in_range(SENSOR_RPM, value)) config->alert_rpm_max = (uint16_t)value;
+        if (validate_in_range(SENSOR_RPM, value)) {
+            config->alert_rpm_max = (uint16_t)value;
+        }
     } else if (strcmp(key, "ALERT_TEMP_MAX") == 0) {
-        if (validate_in_range(SENSOR_TEMP, value)) config->alert_temp_max = (uint8_t)value;
+        if (validate_in_range(SENSOR_TEMP, value)) {
+            config->alert_temp_max = (uint8_t)value;
+        }
     } else if (strcmp(key, "STATUS_SPEED_WARN") == 0) {
-        if (validate_in_range(SENSOR_SPEED, value)) config->status_speed_warn = (uint8_t)value;
+        if (validate_in_range(SENSOR_SPEED, value)) {
+            config->status_speed_warn = (uint8_t)value;
+        }
     } else if (strcmp(key, "STATUS_SPEED_CRIT") == 0) {
-        if (validate_in_range(SENSOR_SPEED, value)) config->status_speed_crit = (uint8_t)value;
+        if (validate_in_range(SENSOR_SPEED, value)) {
+            config->status_speed_crit = (uint8_t)value;
+        }
     } else if (strcmp(key, "STATUS_RPM_WARN") == 0) {
-        if (validate_in_range(SENSOR_RPM, value)) config->status_rpm_warn = (uint16_t)value;
+        if (validate_in_range(SENSOR_RPM, value)) {
+            config->status_rpm_warn = (uint16_t)value;
+        }
     } else if (strcmp(key, "STATUS_RPM_CRIT") == 0) {
-        if (validate_in_range(SENSOR_RPM, value)) config->status_rpm_crit = (uint16_t)value;
+        if (validate_in_range(SENSOR_RPM, value)) {
+            config->status_rpm_crit = (uint16_t)value;
+        }
     } else if (strcmp(key, "STATUS_TEMP_WARN") == 0) {
-        if (validate_in_range(SENSOR_TEMP, value)) config->status_temp_warn = (uint8_t)value;
+        if (validate_in_range(SENSOR_TEMP, value)) {
+            config->status_temp_warn = (uint8_t)value;
+        }
     } else if (strcmp(key, "STATUS_TEMP_CRIT") == 0) {
-        if (validate_in_range(SENSOR_TEMP, value)) config->status_temp_crit = (uint8_t)value;
+        if (validate_in_range(SENSOR_TEMP, value)) {
+            config->status_temp_crit = (uint8_t)value;
+        }
     } else if (strcmp(key, "LOG_LEVEL") == 0) {
         /* 0=LOG_INFO, 1=LOG_WARNING, 2=LOG_ERROR（logger.hのLogLevel定義順と一致させる） */
-        if (validate_log_level(value)) config->log_level = (LogLevel)value;
+        if (validate_log_level(value)) {
+            config->log_level = (LogLevel)value;
+        }
+    } else {
+        /* 未知のキーは無視する */
     }
-    /* 未知のキーは無視する */
 }
 
 /* 指定したファイルからKEY=VALUE形式で設定値を読み込む。
@@ -73,7 +95,7 @@ bool config_load(ConfigData *config, const char *filename) {
 
     char line[CONFIG_LINE_SIZE];
     while (fgets(line, sizeof(line), fp) != NULL) {
-        apply_line(config, line);
+        config_apply_line(config, line);
     }
     fclose(fp);
 

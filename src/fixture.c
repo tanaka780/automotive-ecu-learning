@@ -20,7 +20,8 @@ typedef struct {
    未知のキー・値欠落・数値に変換できない行・値域外の値は無視する（config.cのapply_lineと同じ考え方）。
    値域チェックはconfig.cと同じvalidate_in_range（validate.h）を使い、int型のまま検証してから
    uint8_t/uint16_tへキャストする */
-static void apply_line(FixtureValues *fv, const char *line) {
+/* config.cにも同名のstatic関数があり、識別子が別ファイルで重複しないよう関数名にモジュール名を付ける（MISRA 5.9） */
+static void fixture_apply_line(FixtureValues *fv, const char *line) {
     char key[FIXTURE_LINE_SIZE];
     char str_value[FIXTURE_LINE_SIZE];
     int  int_value;
@@ -40,13 +41,20 @@ static void apply_line(FixtureValues *fv, const char *line) {
     }
 
     if (strcmp(key, "SPEED") == 0) {
-        if (validate_in_range(SENSOR_SPEED, int_value)) fv->data.speed = (uint8_t)int_value;
+        if (validate_in_range(SENSOR_SPEED, int_value)) {
+            fv->data.speed = (uint8_t)int_value;
+        }
     } else if (strcmp(key, "RPM") == 0) {
-        if (validate_in_range(SENSOR_RPM, int_value)) fv->data.rpm = (uint16_t)int_value;
+        if (validate_in_range(SENSOR_RPM, int_value)) {
+            fv->data.rpm = (uint16_t)int_value;
+        }
     } else if (strcmp(key, "TEMP") == 0) {
-        if (validate_in_range(SENSOR_TEMP, int_value)) fv->data.temperature = (uint8_t)int_value;
+        if (validate_in_range(SENSOR_TEMP, int_value)) {
+            fv->data.temperature = (uint8_t)int_value;
+        }
+    } else {
+        /* 未知のキーは無視する */
     }
-    /* 未知のキーは無視する */
 }
 
 bool fixture_apply(VehicleSensorData *data, const char *filename) {
@@ -63,7 +71,7 @@ bool fixture_apply(VehicleSensorData *data, const char *filename) {
 
     char line[FIXTURE_LINE_SIZE];
     while (fgets(line, sizeof(line), fp) != NULL) {
-        apply_line(&fv, line);
+        fixture_apply_line(&fv, line);
     }
     fclose(fp);
 
