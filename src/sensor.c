@@ -25,7 +25,8 @@ void sensor_update(VehicleSensorData *data) {
 /* センサ値を1行でコンソールに出力する */
 void sensor_print(const VehicleSensorData *data) {
     char line[64];   /* "Speed: 120 km/h | RPM: 6000 | Temp: 100 C" が収まるサイズ */
-    snprintf(line, sizeof(line), "Speed: %3d km/h | RPM: %4d | Temp: %3d C",
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line), "Speed: %3d km/h | RPM: %4d | Temp: %3d C",
              (int)data->speed, (int)data->rpm, (int)data->temperature);
     log_print(line);
 }

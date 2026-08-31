@@ -122,6 +122,18 @@ static void test_load_corrupted_non_numeric(void) {
           "数値以外: dtcは変更されない");
 }
 
+/* /dev/full（Linux上で書き込みが必ず失敗する特殊デバイス）へ保存させ、
+   fputs/fcloseの失敗を検出してfalseを返すことを確認する。WSL2 Ubuntu環境前提のテスト */
+static void test_save_write_failure(void) {
+    DtcRecord dtc;
+    diag_init(&dtc);
+    test_feed(&dtc, 50, 5001, 50);   /* 保存対象に適当な中身を持たせる */
+
+    bool ok = persist_save_dtc(&dtc, "/dev/full");
+
+    TEST_ASSERT_FALSE_MESSAGE(ok, "書き込み失敗(/dev/full): 保存は失敗を返す");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -129,6 +141,7 @@ int main(void) {
     RUN_TEST(test_load_file_not_found);
     RUN_TEST(test_load_corrupted_too_few_values);
     RUN_TEST(test_load_corrupted_non_numeric);
+    RUN_TEST(test_save_write_failure);
 
     int result = UNITY_END();
     remove(TEST_PERSIST_FILENAME);   /* テスト専用ファイルの後片付け */

@@ -6,12 +6,13 @@ static LogLevel g_level = LOG_INFO;
 
 /* タグなしメッセージをそのまま1行出力する */
 void log_print(const char *message) {
-    printf("%s\n", message);
+    /* コンソール出力の失敗はこのプロジェクトの用途では実用上意味を持たないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)printf("%s\n", message);
 }
 
 /* タグ付きメッセージを [TAG] message の形式で1行出力する */
 void log_print_tagged(const char *tag, const char *message) {
-    printf("[%s] %s\n", tag, message);
+    (void)printf("[%s] %s\n", tag, message);
 }
 
 /* levelが現在の表示閾値未満なら何もせず、それ以外はタグ付きメッセージとして出力する */

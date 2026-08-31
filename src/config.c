@@ -97,7 +97,8 @@ bool config_load(ConfigData *config, const char *filename) {
     while (fgets(line, sizeof(line), fp) != NULL) {
         config_apply_line(config, line);
     }
-    fclose(fp);
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
 
     log_print_tagged("CONFIG", "Loaded config file");
     return true;
@@ -106,7 +107,8 @@ bool config_load(ConfigData *config, const char *filename) {
 /* 設定値を1行でコンソールに出力する（確認用） */
 void config_print(const ConfigData *config) {
     char line[128];   /* "AlertMax(...) StatusWarn(...) StatusCrit(...)" が収まるサイズ */
-    snprintf(line, sizeof(line),
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line),
              "AlertMax(speed=%d,rpm=%d,temp=%d) StatusWarn(speed=%d,rpm=%d,temp=%d) StatusCrit(speed=%d,rpm=%d,temp=%d)",
              (int)config->alert_speed_max, (int)config->alert_rpm_max, (int)config->alert_temp_max,
              (int)config->status_speed_warn, (int)config->status_rpm_warn, (int)config->status_temp_warn,

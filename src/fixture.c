@@ -73,7 +73,8 @@ bool fixture_apply(VehicleSensorData *data, const char *filename) {
     while (fgets(line, sizeof(line), fp) != NULL) {
         fixture_apply_line(&fv, line);
     }
-    fclose(fp);
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
 
     if (fv.mode_seen && fv.mode_fixed) {
         *data = fv.data;

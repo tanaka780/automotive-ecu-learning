@@ -32,7 +32,8 @@ static const char *level_to_str(SensorLevel level) {
 /* 各センサの状態レベルを1行でコンソールに出力する */
 void status_print(const SensorStatus *status) {
     char line[64];   /* "Speed: NORMAL   | RPM: NORMAL   | Temp: NORMAL  " が収まるサイズ */
-    snprintf(line, sizeof(line), "Speed: %s | RPM: %s | Temp: %s",
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line), "Speed: %s | RPM: %s | Temp: %s",
              level_to_str(status->levels[SENSOR_SPEED]),
              level_to_str(status->levels[SENSOR_RPM]),
              level_to_str(status->levels[SENSOR_TEMP]));

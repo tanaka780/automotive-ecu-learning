@@ -71,7 +71,8 @@ void diag_clear_sensor(DtcRecord *dtc, SensorId sensor) {
     }
 
     char line[32];   /* "Cleared: Speed" 相当が収まるサイズ */
-    snprintf(line, sizeof(line), "Cleared: %s", sensor_name(sensor));
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line), "Cleared: %s", sensor_name(sensor));
     log_print_leveled(LOG_INFO, "DTC", line);
 }
 
@@ -101,7 +102,8 @@ void diag_print(const DtcRecord *dtc) {
     char line[128];
 
     for (int i = 0; i < (int)SENSOR_COUNT; i++) {
-        snprintf(line, sizeof(line), "%-6s%-8s CRITICAL occurrences: %d",
+        /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+        (void)snprintf(line, sizeof(line), "%-6s%-8s CRITICAL occurrences: %d",
                  sensor_name(dtc->entries[i].sensor),
                  dtc_status_to_str(dtc->entries[i].status),
                  (int)dtc->entries[i].count);
@@ -109,7 +111,8 @@ void diag_print(const DtcRecord *dtc) {
     }
 
     if (dtc->freeze_frame.captured) {
-        snprintf(line, sizeof(line), "Freeze Frame (trigger: %s) Speed:%3d km/h RPM:%4d Temp:%3d C",
+        /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+        (void)snprintf(line, sizeof(line), "Freeze Frame (trigger: %s) Speed:%3d km/h RPM:%4d Temp:%3d C",
                  sensor_name(dtc->freeze_frame.trigger_sensor),
                  (int)dtc->freeze_frame.data.speed,
                  (int)dtc->freeze_frame.data.rpm,

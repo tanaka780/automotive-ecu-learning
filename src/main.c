@@ -32,7 +32,9 @@ int main(void) {
 
     ConfigData config;                /* 閾値の設定値（alert_check/status_checkに渡す） */
     config_init(&config);
-    config_load(&config, CONFIG_FILENAME);
+    if (!config_load(&config, CONFIG_FILENAME)) {
+        /* 読み込み失敗時もconfig_initのデフォルト値のまま継続する（フェイルセーフ）。詳細はconfig.c内のログ参照 */
+    }
     logger_set_level(config.log_level);   /* config_load直後に呼ぶ: 以降のlog_print_leveled呼び出しに反映させる */
     config_print(&config);
 
@@ -40,7 +42,9 @@ int main(void) {
 
     DtcRecord dtc;                  /* DTC記録（センサ別のCRITICAL発生回数、前回状態を内部に保持） */
     diag_init(&dtc);
-    persist_load_dtc(&dtc, PERSIST_DTC_FILENAME);  /* 保存ファイルが無ければ(初回起動等)diag_initの初期値のまま継続する */
+    if (!persist_load_dtc(&dtc, PERSIST_DTC_FILENAME)) {
+        /* 保存ファイルが無い/壊れている場合もdiag_initの初期値のまま継続する（フェイルセーフ）。詳細はpersist.c内のログ参照 */
+    }
 
     Ignition ignition;               /* イグニッション状態（現在・前回を内部に保持） */
     ignition_init(&ignition);
@@ -48,7 +52,8 @@ int main(void) {
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
         char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
-        snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", i);
+        /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+        (void)snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", i);
         log_print(sample_line);
         ignition_update(&ignition);                   /* イグニッション状態を更新する (書く) */
         ignition_print(&ignition);                    /* イグニッション状態を表示する (読む) */
@@ -84,7 +89,9 @@ int main(void) {
         cmd_notify_rejected();
     }
 
-    persist_save_dtc(&dtc, PERSIST_DTC_FILENAME);      /* 次回起動時のためにDTC記録を保存する */
+    if (!persist_save_dtc(&dtc, PERSIST_DTC_FILENAME)) {   /* 次回起動時のためにDTC記録を保存する */
+        /* 保存失敗時も特別な処理は行わない。詳細はpersist.c内のログ参照 */
+    }
 
     return 0;
 }

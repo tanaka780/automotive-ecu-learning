@@ -11,7 +11,8 @@
 
 /* DtcRecordの内容を、固定順の整数を改行区切りにしたテキストへ組み立てる（ファイルは扱わない） */
 static void dtc_to_text(const DtcRecord *dtc, char *buf, size_t bufsize) {
-    snprintf(buf, bufsize,
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(buf, bufsize,
              "%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n",
              (int)dtc->entries[SENSOR_SPEED].count,
              (int)dtc->entries[SENSOR_SPEED].status,
@@ -67,16 +68,18 @@ static bool text_to_dtc(const char *text, DtcRecord *dtc) {
     return true;
 }
 
-/* テキストをファイルへ書き込む（渡された文字列の中身は解釈せず、書き込むだけ） */
+/* テキストをファイルへ書き込む（渡された文字列の中身は解釈せず、書き込むだけ）。
+   書き込みモードのfcloseはバッファのフラッシュを伴うため、失敗は実際のデータ損失を意味する。
+   fputs/fcloseの戻り値を両方確認し、どちらかが失敗したらfalseを返す（MISRA Directive 4.7） */
 static bool write_text_to_file(const char *filename, const char *text) {
     FILE *fp = fopen(filename, "w");
     if (fp == NULL) {
         return false;
     }
 
-    fputs(text, fp);
-    fclose(fp);
-    return true;
+    bool write_ok = (fputs(text, fp) != EOF);
+    bool close_ok = (fclose(fp) == 0);
+    return write_ok && close_ok;
 }
 
 /* ファイルの内容をそのままバッファへ読み込む（内容の意味は解釈しない） */
@@ -89,7 +92,8 @@ static bool read_text_from_file(const char *filename, char *buf, size_t bufsize)
     /* bufsizeはsize_t（符号なし）のため、引く数値も符号なしリテラルにする（MISRA 10.4） */
     size_t len = fread(buf, 1, bufsize - 1U, fp);
     buf[len] = '\0';
-    fclose(fp);
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
     return true;
 }
 

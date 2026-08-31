@@ -28,7 +28,8 @@ static const char *ignition_state_to_str(IgnitionState state) {
 void ignition_check(const Ignition *ignition) {
     if (ignition->current != ignition->previous) {
         char line[32];   /* "OFF -> ON" が収まるサイズ */
-        snprintf(line, sizeof(line), "%s -> %s",
+        /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+        (void)snprintf(line, sizeof(line), "%s -> %s",
                  ignition_state_to_str(ignition->previous),
                  ignition_state_to_str(ignition->current));
         log_print_leveled(LOG_INFO, "IGN", line);

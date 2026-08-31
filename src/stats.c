@@ -61,22 +61,23 @@ void stats_print(const VehicleStats *stats) {
 
     log_print("");   /* 見出し前の空行（元のprintf("\n...")の空行部分に相当） */
 
-    snprintf(line, sizeof(line), "--- Stats (%d samples) ---", (int)stats->count);
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line), "--- Stats (%d samples) ---", (int)stats->count);
     log_print(line);
 
     /* 複合式（除算）を直接キャストせず、一旦変数で受けてからキャストする（MISRA 10.8） */
     uint16_t speed_avg = stats->speed_sum / stats->count;
-    snprintf(line, sizeof(line), "Speed: min=%3d  max=%3d  avg=%3d km/h",
+    (void)snprintf(line, sizeof(line), "Speed: min=%3d  max=%3d  avg=%3d km/h",
              (int)stats->speed_min, (int)stats->speed_max, (int)speed_avg);
     log_print(line);
 
     uint32_t rpm_avg = stats->rpm_sum / stats->count;
-    snprintf(line, sizeof(line), "RPM  : min=%4d  max=%4d  avg=%4d",
+    (void)snprintf(line, sizeof(line), "RPM  : min=%4d  max=%4d  avg=%4d",
              (int)stats->rpm_min, (int)stats->rpm_max, (int)rpm_avg);
     log_print(line);
 
     uint16_t temp_avg = stats->temp_sum / stats->count;
-    snprintf(line, sizeof(line), "Temp : min=%3d  max=%3d  avg=%3d C",
+    (void)snprintf(line, sizeof(line), "Temp : min=%3d  max=%3d  avg=%3d C",
              (int)stats->temp_min, (int)stats->temp_max, (int)temp_avg);
     log_print(line);
 }
