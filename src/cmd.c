@@ -47,7 +47,8 @@ void cmd_dispatch(const char *line, DtcRecord *dtc) {
     }
 
     if (strncmp(line, "clear ", 6) == 0) {
-        const char *target = line + 6;
+        /* ポインタ演算(line + 6)ではなく配列添字表記にする（MISRA 18.4） */
+        const char *target = &line[6];
 
         /* targetの中に空白が残っている場合は"clear <対象> <余分なトークン>"とみなす */
         if (strchr(target, ' ') != NULL) {

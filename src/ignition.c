@@ -12,7 +12,8 @@ void ignition_init(Ignition *ignition) {
 /* 実際のイグニッションはドライバー操作で変わるが、このプロジェクトでは学習用にランダム値で代替する */
 void ignition_update(Ignition *ignition) {
     ignition->previous = ignition->current;
-    ignition->current  = (rand() % 2 == 0) ? IGNITION_OFF : IGNITION_ON;
+    /* %と==の優先順位を明示するため、rand() % 2を括弧で囲む（MISRA 12.1） */
+    ignition->current  = ((rand() % 2) == 0) ? IGNITION_OFF : IGNITION_ON;
 }
 
 /* イグニッション状態を表示名に変換する（ignition.c専用の表示ヘルパー） */

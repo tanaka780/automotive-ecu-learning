@@ -62,7 +62,8 @@ void diag_clear_sensor(DtcRecord *dtc, SensorId sensor) {
     dtc->entries[sensor].count  = 0;
     dtc->entries[sensor].status = DTC_NONE;
 
-    if (dtc->freeze_frame.captured && dtc->freeze_frame.trigger_sensor == sensor) {
+    /* &&の左右それぞれに括弧を付け、演算子の優先順位を明示する（MISRA 12.1） */
+    if ((dtc->freeze_frame.captured) && (dtc->freeze_frame.trigger_sensor == sensor)) {
         dtc->freeze_frame.data.speed       = 0;
         dtc->freeze_frame.data.rpm         = 0;
         dtc->freeze_frame.data.temperature = 0;

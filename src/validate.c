@@ -20,10 +20,12 @@ bool validate_in_range(SensorId id, int value) {
     if (id >= SENSOR_COUNT) {
         return false;
     }
-    return value >= sensor_ranges[id].min && value <= sensor_ranges[id].max;
+    /* >=/<=と&&の優先順位を明示するため、比較式それぞれを括弧で囲む（MISRA 12.1） */
+    return (value >= sensor_ranges[id].min) && (value <= sensor_ranges[id].max);
 }
 
 bool validate_log_level(int value) {
     /* LOG_INFO/LOG_ERRORはenum定数のため、int（value）との比較にはキャストが必要（MISRA 10.4） */
-    return value >= (int)LOG_INFO && value <= (int)LOG_ERROR;
+    /* >=/<=と&&の優先順位を明示するため、比較式それぞれを括弧で囲む（MISRA 12.1） */
+    return (value >= (int)LOG_INFO) && (value <= (int)LOG_ERROR);
 }
