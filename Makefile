@@ -14,7 +14,7 @@ TEST_CFLAGS = $(CFLAGS) -I$(UNITY_DIR)
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -64,6 +64,11 @@ TEST_FIXTURE_TARGET = test_fixture
 TEST_VALIDATE_SRCS = test/test_validate.c src/validate.c $(UNITY_DIR)/unity.c
 TEST_VALIDATE_TARGET = test_validate
 
+# faultmgr.c の動作確認用テスト（Debounce/Degraded/Recoveryの遷移、フェイルセーフ値の差し替えの確認、main.c は使わない）
+# faultmgr.cはSensorStatusを直接組み立てて呼ぶためstatus.c/config.cは不要。validate.c同様、対象モジュール+logger.cのみで足りる
+TEST_FAULTMGR_SRCS = test/test_faultmgr.c src/faultmgr.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_FAULTMGR_TARGET = test_faultmgr
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 
@@ -99,12 +104,15 @@ $(TEST_FIXTURE_TARGET): $(TEST_FIXTURE_SRCS)
 $(TEST_VALIDATE_TARGET): $(TEST_VALIDATE_SRCS)
 	$(CC) $(TEST_CFLAGS) $(TEST_VALIDATE_SRCS) -o $(TEST_VALIDATE_TARGET)
 
+$(TEST_FAULTMGR_TARGET): $(TEST_FAULTMGR_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_FAULTMGR_SRCS) -o $(TEST_FAULTMGR_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validateをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgrをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -114,7 +122,8 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_CONFIG_TARGET)
 	./$(TEST_FIXTURE_TARGET)
 	./$(TEST_VALIDATE_TARGET)
+	./$(TEST_FAULTMGR_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET)

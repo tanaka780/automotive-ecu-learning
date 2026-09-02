@@ -14,6 +14,7 @@
 #include "cmd.h"
 #include "config.h"
 #include "fixture.h"
+#include "faultmgr.h"
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -49,6 +50,9 @@ int main(void) {
     Ignition ignition;               /* イグニッション状態（現在・前回を内部に保持） */
     ignition_init(&ignition);
 
+    FaultManager fault_mgr;           /* センサ別のDebounce/Degraded/Recovery状態（永続化はしない） */
+    faultmgr_init(&fault_mgr);
+
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
         char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
@@ -68,8 +72,15 @@ int main(void) {
             status_check(&sensor_status, &sensor_data, &config); /* 状態レベルを判定する */
             status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
             diag_check(&dtc, &sensor_status, &sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
-            alert_check(&sensor_data, &config);           /* 閾値超過の警告を表示する (読む) */
-            stats_update(&stats, &sensor_data);           /* 統計データを更新する */
+            faultmgr_check(&fault_mgr, &sensor_status);    /* 確定した異常(Degraded)・復帰(Recovery)を判定する */
+
+            /* diag_check/status_checkは常にraw(sensor_data)を見て診断の正確性を保つ。
+               Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え、
+               以降の警告・統計はeffective_dataを使って動作を継続する */
+            VehicleSensorData effective_data;
+            faultmgr_apply_safe_values(&fault_mgr, &sensor_data, &effective_data);
+            alert_check(&effective_data, &config);         /* 閾値超過の警告を表示する (読む) */
+            stats_update(&stats, &effective_data);         /* 統計データを更新する */
         }
 
         sleep(1);                                     /* 1秒待つ */

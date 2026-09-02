@@ -629,9 +629,17 @@ Rule 17.7（戻り値のある関数の戻り値は使うか`(void)`キャスト
 
 `fclose`は書き込みモード（"w"）と読み込みモード（"r"）で失敗の意味が異なる。書き込みモードのfcloseはバッファのフラッシュを伴うため、失敗は実際のデータ損失を意味する（`fputs`が成功していても、内容が小さいとstdioの内部バッファに留まり、実際の書き込み失敗はfclose時に初めて表面化することもある）。読み込みモードのfcloseは、既に読み込み済みのデータの正しさに影響しないため、失敗しても実害が無い。persist.cの`write_text_to_file`が`fputs`/`fclose`の戻り値を見ずに常に成功扱いしていたのは、この区別を意識していなかった実装上のギャップだった。
 
+### 診断の正確性と縮退動作の継続を両立する値の分離（faultmgr.c、Phase15）
+
+Degraded確定後のフェイルセーフ値を`status_check`/`diag_check`にも見せてしまうとDTCのactive/history判定が誤るため、raw値（`sensor_data`）と差し替え後の値（`effective_data`）を分け、diag_checkの後・alert_check/stats_updateの前でだけ差し替える設計にした。
+
 ### 実車ECUには「終了コード」という概念が無い（Phase14）
 
 Directive 4.7への対応として、当初`persist_save_dtc`の失敗時にmain()の終了コードを変える案を検討したが、そもそも「プロセスの終了コード」はOS上で動くプログラム特有の概念で、無限ループで動き続けるかウォッチドッグでリセットされる実車ECUのファームウェアには存在しないと気づいた。実車であれば、保存失敗は終了コードではなくDTC化・縮退動作（Degraded mode）で扱われるべきもので、これはstudy_plan.mdの保留中候補にある「故障確定とFail-safe」というテーマそのものである。今回はexit code案を見送り、既存のログ出力のみに留めた。
+
+### Debounce・Degraded mode・Recovery（故障確定とFail-safe、Phase15）
+
+CRITICALが3回連続したら一時的なノイズと区別して確定（Debounce）、確定中はフェイルセーフ値で動作を継続し（Degraded mode）、NORMALが3回連続したら復帰する（Recovery）という設計にした。
 
 ## まだ理解が浅いこと
 

@@ -372,10 +372,10 @@ Day19時点でPhase7本来のタスク（コマンド受け付け方の検討・
 
 ### タスク
 
-- [ ] Debounce（CRITICALがN回連続したら確定とみなす仕組み）・Degraded mode（縮退動作）・Recovery（復帰条件）の設計を決める
-- [ ] 上記の設計を実装する
-- [ ] 自動テストを追加する
-- [ ] `make run`で実行確認する
+- [x] Debounce（CRITICALがN回連続したら確定とみなす仕組み）・Degraded mode（縮退動作）・Recovery（復帰条件）の設計を決める
+- [x] 上記の設計を実装する
+- [x] 自動テストを追加する
+- [x] `make run`で実行確認する
 
 ---
 
