@@ -33,9 +33,8 @@ int main(void) {
 
     ConfigData config;                /* 閾値の設定値（alert_check/status_checkに渡す） */
     config_init(&config);
-    if (!config_load(&config, CONFIG_FILENAME)) {
-        /* 読み込み失敗時もconfig_initのデフォルト値のまま継続する（フェイルセーフ）。詳細はconfig.c内のログ参照 */
-    }
+    bool config_ok = config_load(&config, CONFIG_FILENAME);
+    /* 読み込み失敗時もconfig_initのデフォルト値のまま継続する（フェイルセーフ）。詳細はconfig.c内のログ参照 */
     logger_set_level(config.log_level);   /* config_load直後に呼ぶ: 以降のlog_print_leveled呼び出しに反映させる */
     config_print(&config);
 
@@ -43,8 +42,16 @@ int main(void) {
 
     DtcRecord dtc;                  /* DTC記録（センサ別のCRITICAL発生回数、前回状態を内部に保持） */
     diag_init(&dtc);
-    if (!persist_load_dtc(&dtc, PERSIST_DTC_FILENAME)) {
-        /* 保存ファイルが無い/壊れている場合もdiag_initの初期値のまま継続する（フェイルセーフ）。詳細はpersist.c内のログ参照 */
+    bool dtc_ok = persist_load_dtc(&dtc, PERSIST_DTC_FILENAME);
+    /* 保存ファイルが無い/壊れている場合もdiag_initの初期値のまま継続する（フェイルセーフ）。詳細はpersist.c内のログ参照 */
+
+    /* 起動時自己診断（POST）：キャリブレーションデータ（config.txt）と診断メモリ（dtc_data.txt）が
+       両方読み込めたかをまとめて記録する。失敗時もconfig_init/diag_initの初期値で動作を継続するため
+       処理の流れは変えず、自己診断の結果をログに残すだけにとどめる */
+    if (config_ok && dtc_ok) {
+        log_print_leveled(LOG_INFO, "POST", "Self-check passed");
+    } else {
+        log_print_leveled(LOG_INFO, "POST", "Self-check did not pass, continuing with defaults");
     }
 
     Ignition ignition;               /* イグニッション状態（現在・前回を内部に保持） */

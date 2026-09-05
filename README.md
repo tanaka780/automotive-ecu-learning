@@ -72,6 +72,7 @@ make test
 | センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する |
 | 入力値域チェック | `config.txt`（閾値）・`fixture.txt`（センサ固定値）から読み込んだ値が、センサごとの物理的にありえる範囲（speed 0〜120／rpm 0〜6000／temp 25〜100）・LOG_LEVELの範囲（0〜2）に収まっているかを検証する。範囲外の値はそのキーだけ無視され、他のキーは反映される |
 | 故障確定とFail-safe | センサ別にCRITICALが3回連続したら「一時的なノイズ」ではなく確定した異常（Degraded）とみなし（Debounce）、確定後はそのセンサの値をフェイルセーフ値に差し替えて警告・統計に反映する（縮退動作）。NORMALが3回連続したら復帰する（Recovery）。DTC記録・診断コマンド（`clear`）はDegraded状態と独立して動作する |
+| 起動時自己診断（POST） | 起動時に`config.txt`・`dtc_data.txt`の読み込み結果を合成し、両方成功なら`[POST] Self-check passed`、いずれか失敗なら`[POST] Self-check did not pass, continuing with defaults`を表示する。判定結果で動作を変えるものではなく、既存のフェイルセーフ（デフォルト値継続）を可視化するのみ |
 
 ---
 
@@ -79,7 +80,7 @@ make test
 
 | モジュール | 役割 |
 | --- | --- |
-| `main.c` | 初期化・ループ制御 |
+| `main.c` | 初期化・ループ制御。起動時自己診断（POST、`config.txt`/`dtc_data.txt`の読み込み結果の合成）も担う |
 | `sensor.c` | センサ値の更新・表示 |
 | `stats.c` | 統計値の更新・表示 |
 | `alert.c` | 閾値チェック・警告表示 |
@@ -126,6 +127,7 @@ make test
 | Phase13 | Unity試用 | 完了（自作`test_common.c`パターンと比較しUnity採用を決定、既存9テストターゲット全てをUnity形式（`vendor/unity/`）に移行。検証内容は変更なし） |
 | Phase14 | MISRA対応 | 完了（cppcheckのMISRA C:2012アドオンで検出した12ルールを判断。5.9/8.9/10.4/10.8/15.6/15.7・17.7（26件、`persist.c`の保存失敗検出修正含む）・12.1/18.4は適用、21.6/21.10・15.5は不採用（理由は既知の制約参照）） |
 | Phase15 | 故障確定とFail-safe（Debounce→Degraded mode→復帰） | 完了（新規`faultmgr.h`/`faultmgr.c`を作成。センサ別にDebounce（3回連続CRITICAL）で確定、Degraded中はフェイルセーフ値に差し替えて`alert_check`/`stats_update`に渡す縮退動作、Recovery（3回連続NORMAL）で復帰。`status_check`/`diag_check`は常にraw値を見てDTCの正確性を保つ。`test/test_faultmgr.c`による自動テスト、`make run`での実行確認まで完了） |
+| Phase16 | 起動時自己診断（POST） | 完了（`main.c`に、`config.txt`・`dtc_data.txt`の読み込み結果を合成する自己診断を追加。判定結果はログ出力のみで動作は変えず、既存のフェイルセーフ（デフォルト値継続）を可視化する。ロジックが単純なためmain.cにインラインで実装し、main.cはUnityのテストターゲットに含められないため自動テストは対象外とし、`make run`で4パターン全て確認した） |
 
 ---
 
@@ -141,3 +143,4 @@ make test
 - 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。ただし値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
 - 故障確定（Debounce/Degraded/Recovery、`faultmgr.c`）の状態は、DTC記録（`persist.c`）とは異なり電源再投入をまたいで保存されない（プログラム起動のたびに未確定状態から再開する）。診断コマンド（`clear`）でDTCをクリアしても、Degraded状態自体はリセットされない（独立した状態として扱う）
+- 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は自動テストの対象外で、`make run`での実行確認のみで検証している

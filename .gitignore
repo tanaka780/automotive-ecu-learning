@@ -10,6 +10,7 @@ test_cmd
 test_config
 test_fixture
 test_validate
+test_faultmgr
 dtc_data.txt
 test_dtc_data.txt
 test_config.txt
