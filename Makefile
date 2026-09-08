@@ -69,6 +69,12 @@ TEST_VALIDATE_TARGET = test_validate
 TEST_FAULTMGR_SRCS = test/test_faultmgr.c src/faultmgr.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_FAULTMGR_TARGET = test_faultmgr
 
+# all/run/test/cleanは実ファイルを作らない疑似ターゲット。
+# 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
+# test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
+# なり、テストが1つも実行されないまま終わってしまう
+.PHONY: all run test clean
+
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
 

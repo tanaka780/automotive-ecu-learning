@@ -128,6 +128,7 @@ make test
 | Phase14 | MISRA対応 | 完了（cppcheckのMISRA C:2012アドオンで検出した12ルールを判断。5.9/8.9/10.4/10.8/15.6/15.7・17.7（26件、`persist.c`の保存失敗検出修正含む）・12.1/18.4は適用、21.6/21.10・15.5は不採用（理由は既知の制約参照）） |
 | Phase15 | 故障確定とFail-safe（Debounce→Degraded mode→復帰） | 完了（新規`faultmgr.h`/`faultmgr.c`を作成。センサ別にDebounce（3回連続CRITICAL）で確定、Degraded中はフェイルセーフ値に差し替えて`alert_check`/`stats_update`に渡す縮退動作、Recovery（3回連続NORMAL）で復帰。`status_check`/`diag_check`は常にraw値を見てDTCの正確性を保つ。`test/test_faultmgr.c`による自動テスト、`make run`での実行確認まで完了） |
 | Phase16 | 起動時自己診断（POST） | 完了（`main.c`に、`config.txt`・`dtc_data.txt`の読み込み結果を合成する自己診断を追加。判定結果はログ出力のみで動作は変えず、既存のフェイルセーフ（デフォルト値継続）を可視化する。ロジックが単純なためmain.cにインラインで実装し、main.cはUnityのテストターゲットに含められないため自動テストは対象外とし、`make run`で4パターン全て確認した） |
+| Phase17 | DTO整理 | 完了（複数ECU化構想を見据え、エンジン監視ECUが送信する想定のデータ範囲（生センサ値＋確定異常フラグ）、メーターECUが受信する範囲、既存構造体を流用するか専用型を新設するかの方針を決定した。CAN通信の実装は伴わず、CAN Phase着手時に反映する） |
 
 ---
 
@@ -144,3 +145,5 @@ make test
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
 - 故障確定（Debounce/Degraded/Recovery、`faultmgr.c`）の状態は、DTC記録（`persist.c`）とは異なり電源再投入をまたいで保存されない（プログラム起動のたびに未確定状態から再開する）。診断コマンド（`clear`）でDTCをクリアしても、Degraded状態自体はリセットされない（独立した状態として扱う）
 - 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は自動テストの対象外で、`make run`での実行確認のみで検証している
+- DTC発生回数（`DtcEntry.count`、`uint8_t`）は上限（255）を超えると飽和させず0に巻き戻る。dtc_data.txtで永続化され複数回の起動をまたいで積み上がる値のため理論上は起こりうるが、通算256回以上の発生が必要であり現実的な発生頻度は低い
+- `config.txt`/`fixture.txt`の数値パース（`sscanf`の`%d`）は、値がint型の範囲を超える場合の動作を保証していない（値域チェック`validate_in_range`が働く前の段階のため）。ローカルで自分が編集する前提のファイルであり、外部・未信頼な入力を想定した対策はしていない
