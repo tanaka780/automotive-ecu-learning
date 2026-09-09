@@ -1,8 +1,11 @@
+/* -std=c11だけではnanosleep()が見えないため、POSIX機能テストマクロをヘッダより前に定義する
+   （timer.cのclock_gettimeと理由は同じ） */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdbool.h>  /* bool を使うために必要 */
 #include <stdlib.h>   /* srand(), rand() */
-#include <time.h>     /* time() */
-#include <unistd.h>   /* sleep() */
+#include <time.h>     /* time(), nanosleep() */
 #include "sensor.h"
 #include "stats.h"
 #include "alert.h"
@@ -15,6 +18,13 @@
 #include "config.h"
 #include "fixture.h"
 #include "faultmgr.h"
+#include "timer.h"
+
+/* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる
+   経過時間ベースの周期判定に置き換えた（study_plan.md Phase18参照） */
+#define SAMPLE_PERIOD_MS 1000U
+/* timer_is_dueのポーリング間隔 [ms]。短いほど周期のずれは小さくなるが、その分CPUを使う */
+#define SAMPLE_POLL_INTERVAL_MS 10U
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
@@ -60,6 +70,9 @@ int main(void) {
     FaultManager fault_mgr;           /* センサ別のDebounce/Degraded/Recovery状態（永続化はしない） */
     faultmgr_init(&fault_mgr);
 
+    Timer sample_timer;                /* サンプル周期(SAMPLE_PERIOD_MS)の判定用 */
+    timer_init(&sample_timer, SAMPLE_PERIOD_MS);
+
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
         char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
@@ -90,7 +103,12 @@ int main(void) {
             stats_update(&stats, &effective_data);         /* 統計データを更新する */
         }
 
-        sleep(1);                                     /* 1秒待つ */
+        /* 固定sleep(1)の代わりに、周期(SAMPLE_PERIOD_MS)が来るまでtimer_is_dueを短い間隔でポーリングする。
+           usleepはPOSIX.1-2008で非推奨のため、後継のnanosleepを使う */
+        struct timespec poll_interval = { .tv_sec = 0, .tv_nsec = (long)SAMPLE_POLL_INTERVAL_MS * 1000000L };
+        while (!timer_is_due(&sample_timer)) {
+            (void)nanosleep(&poll_interval, NULL);
+        }
     }
 
     stats_print(&stats);
