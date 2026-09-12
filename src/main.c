@@ -1,11 +1,7 @@
-/* -std=c11だけではnanosleep()が見えないため、POSIX機能テストマクロをヘッダより前に定義する
-   （timer.cのclock_gettimeと理由は同じ） */
-#define _POSIX_C_SOURCE 200809L
-
 #include <stdio.h>
 #include <stdbool.h>  /* bool を使うために必要 */
 #include <stdlib.h>   /* srand(), rand() */
-#include <time.h>     /* time(), nanosleep() */
+#include <time.h>     /* time() */
 #include "sensor.h"
 #include "stats.h"
 #include "alert.h"
@@ -18,16 +14,61 @@
 #include "config.h"
 #include "fixture.h"
 #include "faultmgr.h"
-#include "timer.h"
+#include "scheduler.h"
 
-/* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる
-   経過時間ベースの周期判定に置き換えた（study_plan.md Phase18参照） */
+/* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
+   周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
 #define SAMPLE_PERIOD_MS 1000U
-/* timer_is_dueのポーリング間隔 [ms]。短いほど周期のずれは小さくなるが、その分CPUを使う */
-#define SAMPLE_POLL_INTERVAL_MS 10U
 
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
+
+/* Schedulerに登録するサンプル周期タスク(run_sample_cycle)が参照する、main()のローカル変数への
+   ポインタ一式。タスク関数はvoid *contextしか受け取れないため、必要なデータをここにまとめて渡す */
+typedef struct {
+    int               sample_index;    /* "[Sample XX]"表示用。呼び出し前にmain()が更新する */
+    Ignition          *ignition;
+    bool              fixture_fixed;
+    VehicleSensorData *sensor_data;
+    const ConfigData  *config;
+    SensorStatus      *sensor_status;
+    DtcRecord         *dtc;
+    FaultManager      *fault_mgr;
+    VehicleStats      *stats;
+} SampleCycleContext;
+
+/* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる */
+static void run_sample_cycle(void *context) {
+    SampleCycleContext *ctx = (SampleCycleContext *)context;
+
+    char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", ctx->sample_index);
+    log_print(sample_line);
+    ignition_update(ctx->ignition);                   /* イグニッション状態を更新する (書く) */
+    ignition_print(ctx->ignition);                    /* イグニッション状態を表示する (読む) */
+    ignition_check(ctx->ignition);                     /* 遷移した瞬間だけイベントを表示する (読む) */
+
+    /* OFF中はECU自体が通電していない状態を再現し、センサ更新以降の処理を全てスキップする */
+    if (ctx->ignition->current == IGNITION_ON) {
+        if (!ctx->fixture_fixed) {
+            sensor_update(ctx->sensor_data);              /* 固定値注入が無ければセンサ値を更新する (書く) */
+        }
+        sensor_print(ctx->sensor_data);                   /* センサ値を表示する (読む) */
+        status_check(ctx->sensor_status, ctx->sensor_data, ctx->config); /* 状態レベルを判定する */
+        status_print(ctx->sensor_status);                 /* 状態レベルを表示する (読む) */
+        diag_check(ctx->dtc, ctx->sensor_status, ctx->sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
+        faultmgr_check(ctx->fault_mgr, ctx->sensor_status); /* 確定した異常(Degraded)・復帰(Recovery)を判定する */
+
+        /* diag_check/status_checkは常にraw(sensor_data)を見て診断の正確性を保つ。
+           Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え、
+           以降の警告・統計はeffective_dataを使って動作を継続する */
+        VehicleSensorData effective_data;
+        faultmgr_apply_safe_values(ctx->fault_mgr, ctx->sensor_data, &effective_data);
+        alert_check(&effective_data, ctx->config);         /* 閾値超過の警告を表示する (読む) */
+        stats_update(ctx->stats, &effective_data);         /* 統計データを更新する */
+    }
+}
 
 int main(void) {
     /* srand: time(NULL) を種にすることで実行ごとに異なる乱数列を生成する */
@@ -70,45 +111,27 @@ int main(void) {
     FaultManager fault_mgr;           /* センサ別のDebounce/Degraded/Recovery状態（永続化はしない） */
     faultmgr_init(&fault_mgr);
 
-    Timer sample_timer;                /* サンプル周期(SAMPLE_PERIOD_MS)の判定用 */
-    timer_init(&sample_timer, SAMPLE_PERIOD_MS);
+    SampleCycleContext ctx = {
+        .sample_index  = 0,
+        .ignition      = &ignition,
+        .fixture_fixed = fixture_fixed,
+        .sensor_data   = &sensor_data,
+        .config        = &config,
+        .sensor_status = &sensor_status,
+        .dtc           = &dtc,
+        .fault_mgr     = &fault_mgr,
+        .stats         = &stats,
+    };
+
+    Scheduler scheduler;                /* サンプル周期タスク(run_sample_cycle)を管理する */
+    scheduler_init(&scheduler);
+    /* SCHEDULER_MAX_TASKS(4)に対し登録は1個のみのため、失敗は想定していない（MISRA 17.7） */
+    (void)scheduler_add_task(&scheduler, run_sample_cycle, &ctx, SAMPLE_PERIOD_MS);
 
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
     for (int i = 1; i <= SAMPLE_COUNT; i++) {
-        char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
-        /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
-        (void)snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", i);
-        log_print(sample_line);
-        ignition_update(&ignition);                   /* イグニッション状態を更新する (書く) */
-        ignition_print(&ignition);                    /* イグニッション状態を表示する (読む) */
-        ignition_check(&ignition);                    /* 遷移した瞬間だけイベントを表示する (読む) */
-
-        /* OFF中はECU自体が通電していない状態を再現し、センサ更新以降の処理を全てスキップする */
-        if (ignition.current == IGNITION_ON) {
-            if (!fixture_fixed) {
-                sensor_update(&sensor_data);              /* 固定値注入が無ければセンサ値を更新する (書く) */
-            }
-            sensor_print(&sensor_data);                   /* センサ値を表示する (読む) */
-            status_check(&sensor_status, &sensor_data, &config); /* 状態レベルを判定する */
-            status_print(&sensor_status);                 /* 状態レベルを表示する (読む) */
-            diag_check(&dtc, &sensor_status, &sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
-            faultmgr_check(&fault_mgr, &sensor_status);    /* 確定した異常(Degraded)・復帰(Recovery)を判定する */
-
-            /* diag_check/status_checkは常にraw(sensor_data)を見て診断の正確性を保つ。
-               Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え、
-               以降の警告・統計はeffective_dataを使って動作を継続する */
-            VehicleSensorData effective_data;
-            faultmgr_apply_safe_values(&fault_mgr, &sensor_data, &effective_data);
-            alert_check(&effective_data, &config);         /* 閾値超過の警告を表示する (読む) */
-            stats_update(&stats, &effective_data);         /* 統計データを更新する */
-        }
-
-        /* 固定sleep(1)の代わりに、周期(SAMPLE_PERIOD_MS)が来るまでtimer_is_dueを短い間隔でポーリングする。
-           usleepはPOSIX.1-2008で非推奨のため、後継のnanosleepを使う */
-        struct timespec poll_interval = { .tv_sec = 0, .tv_nsec = (long)SAMPLE_POLL_INTERVAL_MS * 1000000L };
-        while (!timer_is_due(&sample_timer)) {
-            (void)nanosleep(&poll_interval, NULL);
-        }
+        ctx.sample_index = i;
+        scheduler_run_due(&scheduler);   /* 周期が来るまで待ち、run_sample_cycleを実行する */
     }
 
     stats_print(&stats);

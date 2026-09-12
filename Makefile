@@ -14,7 +14,7 @@ TEST_CFLAGS = $(CFLAGS) -I$(UNITY_DIR)
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -74,6 +74,11 @@ TEST_FAULTMGR_TARGET = test_faultmgr
 TEST_TIMER_SRCS = test/test_timer.c src/timer.c $(UNITY_DIR)/unity.c
 TEST_TIMER_TARGET = test_timer
 
+# scheduler.c の動作確認用テスト（タスク登録・初回即時実行・周期判定の確認、main.c は使わない）
+# scheduler.cはtimer.cに依存するため、timer.cも含める
+TEST_SCHEDULER_SRCS = test/test_scheduler.c src/scheduler.c src/timer.c $(UNITY_DIR)/unity.c
+TEST_SCHEDULER_TARGET = test_scheduler
+
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
@@ -121,12 +126,15 @@ $(TEST_FAULTMGR_TARGET): $(TEST_FAULTMGR_SRCS)
 $(TEST_TIMER_TARGET): $(TEST_TIMER_SRCS)
 	$(CC) $(TEST_CFLAGS) $(TEST_TIMER_SRCS) -o $(TEST_TIMER_TARGET)
 
+$(TEST_SCHEDULER_TARGET): $(TEST_SCHEDULER_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_SCHEDULER_SRCS) -o $(TEST_SCHEDULER_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timerをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_schedulerをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -138,7 +146,8 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_VALIDATE_TARGET)
 	./$(TEST_FAULTMGR_TARGET)
 	./$(TEST_TIMER_TARGET)
+	./$(TEST_SCHEDULER_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET)

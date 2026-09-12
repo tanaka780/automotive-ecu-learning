@@ -12,6 +12,7 @@ test_fixture
 test_validate
 test_faultmgr
 test_timer
+test_scheduler
 dtc_data.txt
 test_dtc_data.txt
 test_config.txt
