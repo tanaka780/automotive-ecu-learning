@@ -14,7 +14,7 @@ TEST_CFLAGS = $(CFLAGS) -I$(UNITY_DIR)
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -65,8 +65,9 @@ TEST_VALIDATE_SRCS = test/test_validate.c src/validate.c $(UNITY_DIR)/unity.c
 TEST_VALIDATE_TARGET = test_validate
 
 # faultmgr.c の動作確認用テスト（Debounce/Degraded/Recoveryの遷移、フェイルセーフ値の差し替えの確認、main.c は使わない）
-# faultmgr.cはSensorStatusを直接組み立てて呼ぶためstatus.c/config.cは不要。validate.c同様、対象モジュール+logger.cのみで足りる
-TEST_FAULTMGR_SRCS = test/test_faultmgr.c src/faultmgr.c src/logger.c $(UNITY_DIR)/unity.c
+# faultmgr.cはSensorStatusを直接組み立てて呼ぶためstatus.c/config.cは不要。Debounce/Recoveryのカウント処理は
+# src/debounce.cに切り出した（Phase20）ため、対象モジュール+logger.c+debounce.cで足りる
+TEST_FAULTMGR_SRCS = test/test_faultmgr.c src/faultmgr.c src/logger.c src/debounce.c $(UNITY_DIR)/unity.c
 TEST_FAULTMGR_TARGET = test_faultmgr
 
 # timer.c の動作確認用テスト（経過時間の単調増加、周期判定の境界、main.c は使わない）
@@ -78,6 +79,17 @@ TEST_TIMER_TARGET = test_timer
 # scheduler.cはtimer.cに依存するため、timer.cも含める
 TEST_SCHEDULER_SRCS = test/test_scheduler.c src/scheduler.c src/timer.c $(UNITY_DIR)/unity.c
 TEST_SCHEDULER_TARGET = test_scheduler
+
+# debounce.c の動作確認用テスト（Debounce/Recoveryの連続回数カウントの確認、main.c は使わない）
+# debounce.cは他モジュールに依存しないため、debounce.cのみで足りる（Phase20）
+TEST_DEBOUNCE_SRCS = test/test_debounce.c src/debounce.c $(UNITY_DIR)/unity.c
+TEST_DEBOUNCE_TARGET = test_debounce
+
+# can.c の動作確認用テスト（フレーム送受信の往復一致、Timeout/Invalid Dataの確定・復帰の確認、main.c は使わない）
+# can.cはfaultmgr.c（送信データの組み立て元）・validate.c（Invalid Data判定）・timer.c（timestamp）・
+# debounce.c（Timeout/Invalid Dataの確定・復帰）に依存する（Phase20）
+TEST_CAN_SRCS = test/test_can.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_TARGET = test_can
 
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
@@ -129,12 +141,18 @@ $(TEST_TIMER_TARGET): $(TEST_TIMER_SRCS)
 $(TEST_SCHEDULER_TARGET): $(TEST_SCHEDULER_SRCS)
 	$(CC) $(TEST_CFLAGS) $(TEST_SCHEDULER_SRCS) -o $(TEST_SCHEDULER_TARGET)
 
+$(TEST_DEBOUNCE_TARGET): $(TEST_DEBOUNCE_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_DEBOUNCE_SRCS) -o $(TEST_DEBOUNCE_TARGET)
+
+$(TEST_CAN_TARGET): $(TEST_CAN_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_CAN_SRCS) -o $(TEST_CAN_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_schedulerをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_canをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -147,7 +165,9 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_FAULTMGR_TARGET)
 	./$(TEST_TIMER_TARGET)
 	./$(TEST_SCHEDULER_TARGET)
+	./$(TEST_DEBOUNCE_TARGET)
+	./$(TEST_CAN_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET)

@@ -15,6 +15,7 @@
 #include "fixture.h"
 #include "faultmgr.h"
 #include "scheduler.h"
+#include "can.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -23,10 +24,14 @@
 /* サンプル数: ここを変えるだけでループ回数を変えられる */
 #define SAMPLE_COUNT 20
 
+/* 警告灯データ(CAN_MSG_FAULT_STATUS)の送受信周期 [ms]。実車で異常系ほど高頻度に送る慣例に合わせ、
+   ゲージデータ(SAMPLE_PERIOD_MS)より短くする（Phase20、Day43決定） */
+#define CAN_FAULT_PERIOD_MS 200U
+
 /* Schedulerに登録するサンプル周期タスク(run_sample_cycle)が参照する、main()のローカル変数への
    ポインタ一式。タスク関数はvoid *contextしか受け取れないため、必要なデータをここにまとめて渡す */
 typedef struct {
-    int               sample_index;    /* "[Sample XX]"表示用。呼び出し前にmain()が更新する */
+    int               sample_index;    /* "[Sample XX]"表示・完了判定用。run_sample_cycle自身が更新する（Phase20） */
     Ignition          *ignition;
     bool              fixture_fixed;
     VehicleSensorData *sensor_data;
@@ -35,11 +40,25 @@ typedef struct {
     DtcRecord         *dtc;
     FaultManager      *fault_mgr;
     VehicleStats      *stats;
+    CanBus            *can_bus;
 } SampleCycleContext;
 
-/* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる */
+/* Schedulerに登録するCAN送受信タスクが参照するポインタ一式。エンジンECU役(送信)・メーターECU役(受信)
+   のどちらも、対象のバス・イグニッション状態だけを見ればよいため同じ形のcontextを共有する（Phase20） */
+typedef struct {
+    const Ignition *ignition;
+    CanBus         *can_bus;
+    const FaultManager *fault_mgr;   /* 送信タスク(run_can_send_fault_status)のみ使用 */
+    CanMonitor     *can_monitor;     /* 受信タスクのみ使用 */
+} CanTaskContext;
+
+/* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
+   CAN送受信タスク（200ms周期、Phase20）が同じSchedulerに混在する現在は、1回のscheduler_run_due呼び出し
+   がこのタスクを実行するとは限らないため、sample_indexはmain()側ではなくここで自己インクリメントし、
+   main()はsample_indexがSAMPLE_COUNTに達するまでscheduler_run_dueを呼び続ける形にする */
 static void run_sample_cycle(void *context) {
     SampleCycleContext *ctx = (SampleCycleContext *)context;
+    ctx->sample_index++;
 
     char sample_line[16];   /* "[Sample 20]" が収まるサイズ */
     /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
@@ -67,6 +86,39 @@ static void run_sample_cycle(void *context) {
         faultmgr_apply_safe_values(ctx->fault_mgr, ctx->sensor_data, &effective_data);
         alert_check(&effective_data, ctx->config);         /* 閾値超過の警告を表示する (読む) */
         stats_update(ctx->stats, &effective_data);         /* 統計データを更新する */
+
+        /* ゲージデータ(CAN_MSG_ENGINE_STATUS)は、Degraded中のセンサをフェイルセーフ値に差し替えた
+           effective_dataを送る。実車のダッシュボードもリンプホーム中は縮退後の値を表示するため */
+        can_send_engine_status(ctx->can_bus, &effective_data);
+    }
+}
+
+/* エンジンECU役：警告灯データ(CAN_MSG_FAULT_STATUS)をCAN_FAULT_PERIOD_MS周期で送信する。
+   ゲージデータと違いfault_mgrの状態(1000ms周期で更新)をそのまま再送するだけの周期タスク（Phase20） */
+static void run_can_send_fault_status(void *context) {
+    CanTaskContext *ctx = (CanTaskContext *)context;
+    if (ctx->ignition->current == IGNITION_ON) {
+        can_send_fault_status(ctx->can_bus, ctx->fault_mgr);
+    }
+}
+
+/* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20） */
+static void run_can_receive_fault_status(void *context) {
+    CanTaskContext *ctx = (CanTaskContext *)context;
+    if (ctx->ignition->current == IGNITION_ON) {
+        CanFaultStatus status;
+        CanLinkState state = can_receive_fault_status(ctx->can_monitor, ctx->can_bus, &status);
+        can_print_fault_status(&status, state);
+    }
+}
+
+/* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20） */
+static void run_can_receive_engine_status(void *context) {
+    CanTaskContext *ctx = (CanTaskContext *)context;
+    if (ctx->ignition->current == IGNITION_ON) {
+        CanEngineStatus status;
+        CanLinkState state = can_receive_engine_status(ctx->can_monitor, ctx->can_bus, &status);
+        can_print_engine_status(&status, state);
     }
 }
 
@@ -111,6 +163,13 @@ int main(void) {
     FaultManager fault_mgr;           /* センサ別のDebounce/Degraded/Recovery状態（永続化はしない） */
     faultmgr_init(&fault_mgr);
 
+    /* CAN通信（Phase20）：実プロセス分離は行わず、busを介してエンジンECU役(送信)・メーターECU役(受信)
+       をSchedulerタスクとして表現する（Day43決定） */
+    CanBus can_bus;
+    can_bus_init(&can_bus);
+    CanMonitor can_monitor;           /* メーターECU役の受信監視状態（Timeout/Invalid Dataの確定・復帰） */
+    can_monitor_init(&can_monitor);
+
     SampleCycleContext ctx = {
         .sample_index  = 0,
         .ignition      = &ignition,
@@ -121,17 +180,39 @@ int main(void) {
         .dtc           = &dtc,
         .fault_mgr     = &fault_mgr,
         .stats         = &stats,
+        .can_bus       = &can_bus,
     };
 
-    Scheduler scheduler;                /* サンプル周期タスク(run_sample_cycle)を管理する */
-    scheduler_init(&scheduler);
-    /* SCHEDULER_MAX_TASKS(4)に対し登録は1個のみのため、失敗は想定していない（MISRA 17.7） */
-    (void)scheduler_add_task(&scheduler, run_sample_cycle, &ctx, SAMPLE_PERIOD_MS);
+    /* 警告灯データ送信タスク(エンジンECU役)用。fault_mgrを読むだけで書き換えない */
+    CanTaskContext can_send_fault_ctx = {
+        .ignition    = &ignition,
+        .can_bus     = &can_bus,
+        .fault_mgr   = &fault_mgr,
+        .can_monitor = NULL,
+    };
+    /* 受信タスク(メーターECU役)用。警告灯・ゲージの両受信タスクで共有する */
+    CanTaskContext can_receive_ctx = {
+        .ignition    = &ignition,
+        .can_bus     = &can_bus,
+        .fault_mgr   = NULL,
+        .can_monitor = &can_monitor,
+    };
 
-    /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く */
-    for (int i = 1; i <= SAMPLE_COUNT; i++) {
-        ctx.sample_index = i;
-        scheduler_run_due(&scheduler);   /* 周期が来るまで待ち、run_sample_cycleを実行する */
+    Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
+    scheduler_init(&scheduler);
+    /* SCHEDULER_MAX_TASKS(4)に対し登録は4個（サンプル1・CAN送信1・CAN受信2）のため、
+       いずれも失敗は想定していない（MISRA 17.7） */
+    (void)scheduler_add_task(&scheduler, run_sample_cycle, &ctx, SAMPLE_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_can_send_fault_status, &can_send_fault_ctx, CAN_FAULT_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_can_receive_fault_status, &can_receive_ctx, CAN_FAULT_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_can_receive_engine_status, &can_receive_ctx, SAMPLE_PERIOD_MS);
+
+    /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く。
+       CAN送受信タスク（200ms周期）がsample_cycle（1000ms周期）より高頻度で混在するため、
+       1回のscheduler_run_dueがsample_cycleを実行するとは限らない。sample_indexが
+       SAMPLE_COUNTに達する（run_sample_cycleがSAMPLE_COUNT回実行される）までポーリングし続ける */
+    while (ctx.sample_index < SAMPLE_COUNT) {
+        scheduler_run_due(&scheduler);   /* 周期が来ているタスク（サンプル・CAN送受信）を実行する */
     }
 
     stats_print(&stats);

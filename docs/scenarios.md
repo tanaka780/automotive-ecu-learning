@@ -90,18 +90,20 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 
 ---
 
-## 通信故障（将来項目）
+## 通信故障
 
-目的：CAN通信の途絶・異常データを検出し、DTCとして記録する
+目的：CAN通信の途絶（Timeout）・異常データ（Invalid Data）を検出できることを確認する。DTCとしての記録は、study_plan.mdの保留中の候補「CAN異常処理」で別途対応予定のため、本シナリオの対象外とする
 
-現時点ではCAN通信自体が未実装（study_plan.mdの保留中の候補にある複数ECU化・CAN通信関連の実装後に対応予定）のため、流れ・期待結果は未確定。ここでは概要のみ記録する。
+流れ（Phase20で実装済みの範囲）：
+1. エンジンECU役がゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、200ms周期）をCAN通信でメーターECU役へ送信する
+2. エンジンECU役がイグニッションOFF等で送信を止める（Timeout）、またはセンサ値が値域外になる（Invalid Data、ゲージデータのみ対象）
+3. メーターECU役が3回連続でTimeout/Invalid Dataを検知すると、`CanLinkState`が`CAN_LINK_LOST`に確定する
+4. 送信が再開し、メーターECU役が3回連続で正常受信すると`CAN_LINK_OK`に復帰する
 
-想定する流れ（イメージ）：
-1. ECU間CAN通信中に、Timeout（応答なし）またはInvalid Data（異常値）が発生する
-2. Fault Detectionが異常を検知する
-3. DTCとして記録される
-
-このシナリオはstudy_plan.mdの保留中の候補（複数ECU化・CAN通信関連）の実装後に具体化する。Phase11で作る固定値注入の仕組み（センサ値の注入）は対象外とし、それまではランダムな通信状態のまま扱う。
+期待結果：
+- Timeout/Invalid Dataが3回連続発生すると`[CAN] ... link lost`のログが出力される
+- 3回連続で正常受信すると`[CAN] ... link recovered`のログが出力される
+- 現時点ではDTC（diag.c）への記録・永続化は行われない（`CanLinkState`はプログラム起動のたびに`CAN_LINK_OK`から再開する）。DTCへの反映は将来の「CAN異常処理」（study_plan.md参照）で対応する
 
 ---
 

@@ -469,6 +469,31 @@ Day19時点でPhase7本来のタスク（コマンド受け付け方の検討・
 
 ---
 
+## Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）
+
+### 選定理由
+
+- 複数ECU化構想の着手順序（Fail-safe→DTO整理→Timer→Scheduler→CAN通信→フォルダ分割）で、Scheduler（Phase19）の次はCAN通信と定めている。Day42の日誌で次回やることとして決定済み
+- Phase17（DTO整理）で決めた送受信データ範囲（生センサ値＋`FaultState`相当の確定異常フラグ）を、実際に転送する段階になった
+
+### 理解目標
+
+- CANフレームの基本構造（ID・DLC・data配列）を理解し、DTOをフレームに詰める設計判断ができる
+- 実車のECUファームウェア（AUTOSAR/ベアメタル）とLinux SocketCANの違いを理解し、技術選定を「車載っぽいから」ではなくこのプロジェクトのストーリーに基づいて判断できる
+- Scheduler（協調的スケジューリング）に、周期送信・非ブロッキング受信のタスクをどう統合するかを判断できる
+- 通信故障（Timeout/Invalid Data）を、Phase15で作ったFail-safeの枠組み（`faultmgr.c`）にどう接続するかを理解する
+
+### タスク
+
+- [x] CAN通信の実現方式を決める（Day43）
+- [x] 自作フレームシミュレーションの詳細設計（フレーム構造、プロセス分離の方法、非ブロッキング方式）を決める（Day43）
+- [x] Timeout/Invalid Dataを`faultmgr.c`の枠組みにどう接続するかを決める（Day43）
+- [x] 上記の設計（CAN通信本体・Timeout/Invalid Data検知）を実装する（Day43）
+- [x] 自動テストを追加する（Day43）
+- [x] `make run`で実行確認する（Day43）
+
+---
+
 ## 開発方針（Phase9以降）
 
 Phase1〜9では、自動車関連プログラムに使われる個々の機能を、主に「C初心者として次に何を学ぶべきか」という学習順序の観点で選んで実装してきた。Phase9以降は、この学習順序だけでなく、完成目標であるECUソフトウェアシミュレータ（車両状態を模擬し、異常を検出・診断・記録し、電源再投入後も診断情報を保持できるECU）に本当に必要かどうかを主な選定基準とする。新しい技術要素の学習自体は今後も続く。
@@ -484,20 +509,19 @@ Phase1〜9では、自動車関連プログラムに使われる個々の機能�
 - 診断コマンド：Ignition OFF時にスキャンツール入力を想定した`clear`／`clear <センサ名>`でDTCをクリア
 - 電源再投入：Ignition OFF時にDTC等の診断情報をNVMへ保存 → ECU再起動時にNVMから復元
 - 設定ファイル異常時のフェイルセーフ：config.txtが無い/壊れている場合、デフォルト値で動作を継続（リンプホームモード）
-- （将来）通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection → DTC
+- 通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection（Phase20で実装済み） → DTC（将来のCAN異常処理で対応予定）
 
 詳細な入出力・期待結果は、docs/scenarios.md として整理した（Phase10で完了）。
 
 ## 保留中の候補
 
-Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase19は完了済み（または着手中）のため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」）を参照し、下記には含めない。
+Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase20は完了済み（または着手中）のため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」「Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）」）を参照し、下記には含めない。
 
 ### 今後の候補テーマ（優先順位・Phase番号は未定）
 
 Phase13以降の着手順は固定しない。実装を進める中で、判断順序（①〜④）に沿ってその都度何を優先するか検討する。番号を振らないのは、優先順位が変わるたびに後続の番号を振り直す事態を避けるため。各項目には、単体で着手するテーマか、他のテーマに差し込む形で扱うテーマかを付記する。
 
 - **NVM強化**（単体で着手）：persist.cを発展させ、保存/読み込み失敗・データ破損・デフォルト復旧等への対応を検討する
-- **CAN通信**（単体で着手、DTO整理の後が望ましい）：仮想CAN等を使い、ECU単体からECU間通信へ発展させる
 - **CAN異常処理**（単体で着手、Scheduler・CAN通信が前提）：Timeout/Invalid Data等の通信故障をFault Detection→DTC→Loggerにつなげる
 - **Watchdog**（単体で着手、Schedulerが前提）：Schedulerが管理する周期処理の停止検出を導入する
 - **ECU構造への再編成**（単体で着手）：機能が増えて責務の置き場所に迷いが出た段階でフォルダ構成を見直す（先行して変更しない。io層／アプリ層分割もこの再編成に含める）
