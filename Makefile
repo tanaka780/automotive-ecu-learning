@@ -14,7 +14,7 @@ TEST_CFLAGS = $(CFLAGS) -I$(UNITY_DIR)
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c
+SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -22,11 +22,11 @@ TARGET = sensor_sim
 # diag.c の動作確認用テスト（固定値データ、main.c は使わない）
 # test/test_common.c: test_diag.c / test_persist.c / test_cmd.cで共通のテスト補助関数（test_feed/test_default_config）
 # test_common.c が内部でtest_default_config（config_init）を使うため src/config.c も含める
-TEST_DIAG_SRCS = test/test_diag.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/validate.c $(UNITY_DIR)/unity.c
+TEST_DIAG_SRCS = test/test_diag.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
 TEST_DIAG_TARGET = test_diag
 
 # persist.c の動作確認用テスト（ファイルI/Oの正常系・異常系、main.c は使わない）
-TEST_PERSIST_SRCS = test/test_persist.c test/test_common.c src/status.c src/diag.c src/logger.c src/persist.c src/config.c src/validate.c $(UNITY_DIR)/unity.c
+TEST_PERSIST_SRCS = test/test_persist.c test/test_common.c src/status.c src/diag.c src/logger.c src/persist.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
 TEST_PERSIST_TARGET = test_persist
 
 # stats.c の動作確認用テスト（min/max/sum/countの更新、main.c は使わない）
@@ -36,7 +36,7 @@ TEST_STATS_TARGET = test_stats
 
 # alert.c の動作確認用テスト（標準出力キャプチャによる警告出力の確認、main.c は使わない）
 # test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
-TEST_ALERT_SRCS = test/test_alert.c test/test_common.c src/status.c src/diag.c src/logger.c src/alert.c src/config.c src/validate.c $(UNITY_DIR)/unity.c
+TEST_ALERT_SRCS = test/test_alert.c test/test_common.c src/status.c src/diag.c src/logger.c src/alert.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
 TEST_ALERT_TARGET = test_alert
 
 # ignition.c の動作確認用テスト（標準出力キャプチャによる遷移イベント出力の確認、main.c は使わない）
@@ -46,12 +46,12 @@ TEST_IGNITION_TARGET = test_ignition
 
 # cmd.c の動作確認用テスト（diag_clear・cmd_dispatchの確認、main.c は使わない）
 # test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
-TEST_CMD_SRCS = test/test_cmd.c test/test_common.c src/status.c src/diag.c src/logger.c src/cmd.c src/config.c src/validate.c $(UNITY_DIR)/unity.c
+TEST_CMD_SRCS = test/test_cmd.c test/test_common.c src/status.c src/diag.c src/logger.c src/cmd.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
 TEST_CMD_TARGET = test_cmd
 
 # config.c の動作確認用テスト（config_loadのファイルパースの正常系・異常系の確認、main.c は使わない）
 # test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
-TEST_CONFIG_SRCS = test/test_config.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/validate.c $(UNITY_DIR)/unity.c
+TEST_CONFIG_SRCS = test/test_config.c test/test_common.c src/status.c src/diag.c src/logger.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
 TEST_CONFIG_TARGET = test_config
 
 # fixture.c の動作確認用テスト（fixture_applyのファイルパースの正常系・異常系の確認、main.c は使わない）
@@ -90,6 +90,16 @@ TEST_DEBOUNCE_TARGET = test_debounce
 # debounce.c（Timeout/Invalid Dataの確定・復帰）に依存する（Phase20）
 TEST_CAN_SRCS = test/test_can.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_TARGET = test_can
+
+# dtc_status.c の動作確認用テスト（発生回数・状態区分(NONE/ACTIVE/HISTORY)の更新確認、main.c は使わない）
+# dtc_status.cは他モジュールに依存しないため、dtc_status.cのみで足りる（Phase21）
+TEST_DTC_STATUS_SRCS = test/test_dtc_status.c src/dtc_status.c $(UNITY_DIR)/unity.c
+TEST_DTC_STATUS_TARGET = test_dtc_status
+
+# can_diag.c の動作確認用テスト（CanLinkStateの遷移によるDTC相当の記録確認、main.c は使わない）
+# can_diag.cはdtc_status.c（発生回数・状態区分の更新）とlogger.c（can_diag_print）に依存する（Phase21）
+TEST_CAN_DIAG_SRCS = test/test_can_diag.c src/can_diag.c src/dtc_status.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_DIAG_TARGET = test_can_diag
 
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
@@ -147,12 +157,18 @@ $(TEST_DEBOUNCE_TARGET): $(TEST_DEBOUNCE_SRCS)
 $(TEST_CAN_TARGET): $(TEST_CAN_SRCS)
 	$(CC) $(TEST_CFLAGS) $(TEST_CAN_SRCS) -o $(TEST_CAN_TARGET)
 
+$(TEST_DTC_STATUS_TARGET): $(TEST_DTC_STATUS_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_DTC_STATUS_SRCS) -o $(TEST_DTC_STATUS_TARGET)
+
+$(TEST_CAN_DIAG_TARGET): $(TEST_CAN_DIAG_SRCS)
+	$(CC) $(TEST_CFLAGS) $(TEST_CAN_DIAG_SRCS) -o $(TEST_CAN_DIAG_TARGET)
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_canをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_can・test_dtc_status・test_can_diagをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -167,7 +183,9 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_SCHEDULER_TARGET)
 	./$(TEST_DEBOUNCE_TARGET)
 	./$(TEST_CAN_TARGET)
+	./$(TEST_DTC_STATUS_TARGET)
+	./$(TEST_CAN_DIAG_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET)

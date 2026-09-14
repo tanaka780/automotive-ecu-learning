@@ -16,6 +16,7 @@
 #include "faultmgr.h"
 #include "scheduler.h"
 #include "can.h"
+#include "can_diag.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -50,6 +51,7 @@ typedef struct {
     CanBus         *can_bus;
     const FaultManager *fault_mgr;   /* 送信タスク(run_can_send_fault_status)のみ使用 */
     CanMonitor     *can_monitor;     /* 受信タスクのみ使用 */
+    CanDtcRecord   *can_dtc;         /* 受信タスクのみ使用（Phase21） */
 } CanTaskContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
@@ -102,22 +104,28 @@ static void run_can_send_fault_status(void *context) {
     }
 }
 
-/* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20） */
+/* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20）。
+   Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 static void run_can_receive_fault_status(void *context) {
     CanTaskContext *ctx = (CanTaskContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
+        CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAULT_STATUS];
         CanFaultStatus status;
         CanLinkState state = can_receive_fault_status(ctx->can_monitor, ctx->can_bus, &status);
+        can_diag_check(ctx->can_dtc, CAN_MSG_FAULT_STATUS, previous, state);
         can_print_fault_status(&status, state);
     }
 }
 
-/* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20） */
+/* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20）。
+   Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 static void run_can_receive_engine_status(void *context) {
     CanTaskContext *ctx = (CanTaskContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
+        CanLinkState previous = ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS];
         CanEngineStatus status;
         CanLinkState state = can_receive_engine_status(ctx->can_monitor, ctx->can_bus, &status);
+        can_diag_check(ctx->can_dtc, CAN_MSG_ENGINE_STATUS, previous, state);
         can_print_engine_status(&status, state);
     }
 }
@@ -169,6 +177,8 @@ int main(void) {
     can_bus_init(&can_bus);
     CanMonitor can_monitor;           /* メーターECU役の受信監視状態（Timeout/Invalid Dataの確定・復帰） */
     can_monitor_init(&can_monitor);
+    CanDtcRecord can_dtc;              /* CAN通信リンクのDTC相当の記録（発生回数・状態区分、Phase21） */
+    can_diag_init(&can_dtc);
 
     SampleCycleContext ctx = {
         .sample_index  = 0,
@@ -189,6 +199,7 @@ int main(void) {
         .can_bus     = &can_bus,
         .fault_mgr   = &fault_mgr,
         .can_monitor = NULL,
+        .can_dtc     = NULL,
     };
     /* 受信タスク(メーターECU役)用。警告灯・ゲージの両受信タスクで共有する */
     CanTaskContext can_receive_ctx = {
@@ -196,6 +207,7 @@ int main(void) {
         .can_bus     = &can_bus,
         .fault_mgr   = NULL,
         .can_monitor = &can_monitor,
+        .can_dtc     = &can_dtc,
     };
 
     Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
@@ -217,6 +229,7 @@ int main(void) {
 
     stats_print(&stats);
     diag_print(&dtc);                                 /* DTC一覧を表示する */
+    can_diag_print(&can_dtc);                         /* CAN通信リンクのDTC相当の記録を表示する（Phase21） */
 
     /* 実車でスキャンツールが駐車中(イグニッションOFF)に接続される状況を再現し、OFF時のみコマンドを受け付ける */
     if (ignition.current == IGNITION_OFF) {

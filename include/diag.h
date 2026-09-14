@@ -6,13 +6,7 @@
 #include <stdbool.h>  /* bool を使うために必要 */
 #include "status.h"   /* SensorStatus を参照するために必要 */
 #include "sensor.h"   /* VehicleSensorData（フリーズフレーム用）と、SensorId（DtcEntry.sensor等で使用）を参照するために必要 */
-
-/* DTCの状態区分：現在も継続中か、過去に発生して解消済みか */
-typedef enum {
-    DTC_NONE = 0,  /* まだ一度もCRITICALになっていない */
-    DTC_ACTIVE,    /* 現在CRITICAL中 */
-    DTC_HISTORY    /* 過去にCRITICALになったが、現在は解消済み */
-} DtcStatus;
+#include "dtc_status.h" /* DtcStatus を参照するために必要（Phase21、can_diag.cとの共通部分として切り出した） */
 
 /* DTC1件分の情報：どのセンサが、何回CRITICALに入ったか、現在の状態区分 */
 typedef struct {

@@ -494,6 +494,30 @@ Day19時点でPhase7本来のタスク（コマンド受け付け方の検討・
 
 ---
 
+## Phase21：CAN異常処理（Timeout/Invalid DataのDTC反映）
+
+### 選定理由
+
+- CAN通信（Phase20）完了後の次点候補として「フォルダ分割のタイミングの再検討」と「CAN異常処理」の2つがあった（下記「保留中の候補」参照）。複数ECU化の着手順序（Fail-safe→DTO整理→Timer→Scheduler→CAN通信→ECU2着手直前でのフォルダ分割）に照らすと、フォルダ分割はまだ「ECU2着手直前」ではなく早すぎるため見送り、CAN異常処理を独立テーマとして選定した
+- 保留中の候補の項目定義そのものが「Timeout/Invalid Data等の通信故障をFault Detection→DTC→Loggerにつなげる」であり、Phase20で実装済みのFault Detection（`CanLinkState`のDebounce/Recoveryによる確定・復帰）を、DTC記録まで接続することが本Phaseの範囲になる
+
+### 理解目標
+
+- 実車のDTC管理（AUTOSARのDem＝Diagnostic Event Manager）が、物理センサ由来の異常（P-code）と通信由来の異常（U-code）を、DTC番号の接頭辞という表示上の区別にとどめ、ソフトウェア構造としては単一の汎用エンジンで扱っていることを理解する
+- 上記の「実車的に最も忠実な設計（診断イベント識別子・エンジンの完全統一）」と、このプロジェクトの規模・既存の型（`SensorId`がセンサ値の型として確立している事実）を踏まえた現実的な折衷案の違いを、自分の言葉で説明できる
+- 「型（識別子・状態の持ち方）は分けるが、記録ロジック（エッジ検出→カウント→状態分類）は共有する」という設計判断を、`debounce.c`（Phase20）の前例（2つ目の具体的な利用先ができたら汎用化する）に照らして説明できる
+
+### タスク
+
+- [x] `diag.c`の`diag_check`から、エッジ検出→カウント→`DTC_NONE`/`ACTIVE`/`HISTORY`分類にあたる汎用部分を切り出す（フリーズフレーム相当の処理は物理センサ固有のため`diag.c`に残す）
+- [x] 切り出したロジックが既存の`diag_check`と同じ結果になることを、既存`test_diag.c`で確認する（検証内容を変えないリファクタリング、Phase20の`debounce.c`切り出しと同じ進め方）
+- [x] CAN通信リンク専用の新規モジュールを作成し、`CanLinkState`（`CAN_LINK_OK`/`CAN_LINK_LOST`）の遷移を切り出したロジックに渡してDTC相当の記録を持たせる
+- [x] Makefile（SRCS・該当テストターゲット）を更新する
+- [x] 自動テストを追加する（切り出した共通ロジック単体、新規CANモジュール）
+- [x] `make run`で、CANリンクのLost/Recovery発生時にDTC相当の記録が更新されることを実行確認する
+
+---
+
 ## 開発方針（Phase9以降）
 
 Phase1〜9では、自動車関連プログラムに使われる個々の機能を、主に「C初心者として次に何を学ぶべきか」という学習順序の観点で選んで実装してきた。Phase9以降は、この学習順序だけでなく、完成目標であるECUソフトウェアシミュレータ（車両状態を模擬し、異常を検出・診断・記録し、電源再投入後も診断情報を保持できるECU）に本当に必要かどうかを主な選定基準とする。新しい技術要素の学習自体は今後も続く。
@@ -509,20 +533,20 @@ Phase1〜9では、自動車関連プログラムに使われる個々の機能�
 - 診断コマンド：Ignition OFF時にスキャンツール入力を想定した`clear`／`clear <センサ名>`でDTCをクリア
 - 電源再投入：Ignition OFF時にDTC等の診断情報をNVMへ保存 → ECU再起動時にNVMから復元
 - 設定ファイル異常時のフェイルセーフ：config.txtが無い/壊れている場合、デフォルト値で動作を継続（リンプホームモード）
-- 通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection（Phase20で実装済み） → DTC（将来のCAN異常処理で対応予定）
+- 通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection（Phase20で実装済み） → DTC（Phase21で対応予定）
 
 詳細な入出力・期待結果は、docs/scenarios.md として整理した（Phase10で完了）。
 
 ## 保留中の候補
 
-Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase20は完了済み（または着手中）のため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」「Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）」）を参照し、下記には含めない。
+Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase21は完了済み（または着手中）のため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」「Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）」「Phase21：CAN異常処理（Timeout/Invalid DataのDTC反映）」）を参照し、下記には含めない。
 
 ### 今後の候補テーマ（優先順位・Phase番号は未定）
 
 Phase13以降の着手順は固定しない。実装を進める中で、判断順序（①〜④）に沿ってその都度何を優先するか検討する。番号を振らないのは、優先順位が変わるたびに後続の番号を振り直す事態を避けるため。各項目には、単体で着手するテーマか、他のテーマに差し込む形で扱うテーマかを付記する。
 
 - **NVM強化**（単体で着手）：persist.cを発展させ、保存/読み込み失敗・データ破損・デフォルト復旧等への対応を検討する
-- **CAN異常処理**（単体で着手、Scheduler・CAN通信が前提）：Timeout/Invalid Data等の通信故障をFault Detection→DTC→Loggerにつなげる
+- **診断イベントモデルの統一（Dem的な汎用DTC管理への発展）**（単体で着手、CAN異常処理（Phase21）が前提）：物理センサ由来のDTC（`diag.c`）とCAN通信由来のDTC（Phase21で新設するモジュール）を、実車のAUTOSAR Dem（Diagnostic Event Manager）のように単一の診断イベント識別子・単一の汎用エンジンへ統合するかを検討する。Phase21時点では`SensorId`がセンサ値の型として既に確立していることを踏まえ、型は分けたまま記録ロジックだけを共有する折衷案を採用しているが、識別子空間まで統一するのはより大きな設計変更のため、ECUがさらに増えるなど統一の動機が具体的に高まったタイミングで再検討する
 - **Watchdog**（単体で着手、Schedulerが前提）：Schedulerが管理する周期処理の停止検出を導入する
 - **ECU構造への再編成**（単体で着手）：機能が増えて責務の置き場所に迷いが出た段階でフォルダ構成を見直す（先行して変更しない。io層／アプリ層分割もこの再編成に含める）
 - **複数ECU**（単体で着手、CAN通信が前提）：Engine ECUとDiagnostic ECU程度の小規模な協調動作を試す

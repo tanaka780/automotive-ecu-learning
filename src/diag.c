@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "diag.h"
 #include "logger.h"
+#include "dtc_status.h"
 
 /* センサ種別から表示名を返す（本体は下記。diag_clear_sensorのログ表示で先に使うための前方宣言） */
 static const char *sensor_name(SensorId sensor);
@@ -23,26 +24,22 @@ void diag_init(DtcRecord *dtc) {
 }
 
 /* 前回CRITICALでなく今回CRITICALになった瞬間（エッジ）だけを発生回数として記録し、
-   現在CRITICAL中ならACTIVE、CRITICALから外れたらHISTORYに遷移させる。
-   最初のエッジでフリーズフレーム（車両状態のスナップショット）を1件だけ記録する */
+   現在CRITICAL中ならACTIVE、CRITICALから外れたらHISTORYに遷移させる（発生回数・状態区分の更新自体は
+   dtc_status_updateに委譲する、Phase21）。最初のエッジでフリーズフレーム（車両状態のスナップショット）
+   を1件だけ記録する処理は、物理センサ固有のためdiag.cに残す */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data) {
     for (int i = 0; i < (int)SENSOR_COUNT; i++) {
-        if (status->levels[i] == LEVEL_CRITICAL) {
-            if (dtc->previous.levels[i] != LEVEL_CRITICAL) {
-                dtc->entries[i].count++;
-                /* 全体で最初のCRITICAL発生時だけスナップショットを記録する（以降は上書きしない） */
-                if (!dtc->freeze_frame.captured) {
-                    dtc->freeze_frame.data           = *data;
-                    dtc->freeze_frame.trigger_sensor = (SensorId)i;
-                    dtc->freeze_frame.captured       = true;
-                }
-            }
-            dtc->entries[i].status = DTC_ACTIVE;
-        } else if (dtc->entries[i].status == DTC_ACTIVE) {
-            dtc->entries[i].status = DTC_HISTORY;
-        } else {
-            /* CRITICALでもACTIVEでもない場合（NONE、またはHISTORY継続）は何もしない */
+        bool was_bad = (dtc->previous.levels[i] == LEVEL_CRITICAL);
+        bool is_bad  = (status->levels[i] == LEVEL_CRITICAL);
+
+        /* 全体で最初のCRITICAL発生時だけスナップショットを記録する（以降は上書きしない） */
+        if (is_bad && (!was_bad) && (!dtc->freeze_frame.captured)) {
+            dtc->freeze_frame.data           = *data;
+            dtc->freeze_frame.trigger_sensor = (SensorId)i;
+            dtc->freeze_frame.captured       = true;
         }
+
+        dtc_status_update(&dtc->entries[i].count, &dtc->entries[i].status, was_bad, is_bad);
     }
 
     /* 次回比較のために今回の状態を保存する */
