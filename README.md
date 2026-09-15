@@ -77,7 +77,7 @@ make test
 | タスク管理（Scheduler） | 関数ポインタ＋周期を持つタスクを複数保持できるタスクテーブルを導入し、周期の待機・呼び出しをmain.cから委譲する。サンプル周期タスクに加え、Phase20でCAN送受信タスクを登録している |
 | CAN通信 | 実プロセス分離は行わず、単一プロセス内でエンジンECU役（送信）・メーターECU役（受信）をSchedulerタスクとして表現する。ゲージデータ（speed/rpm/temp、1000ms周期）と警告灯データ（センサ別の確定異常フラグをビット詰め、200ms周期）を別メッセージ（CAN ID）で送受信し、受信側はTimeout（新しいフレームが来ない）・Invalid Data（validate.cでの値域外判定）をDebounce/Recovery（3回連続）で確定・復帰させる |
 | CAN異常処理（DTC反映） | CANリンクのLost/Recoveryをdiag.cのDTC相当の記録（発生回数・状態区分NONE/ACTIVE/HISTORY）としてメッセージ別に記録する。診断コード管理の共通ロジック（エッジ検出→カウント→状態分類）はdiag.cから切り出し、物理センサ・CAN通信の両方から使う |
-| CAN Fault Injection | `can_fault.txt`で指定したメッセージ（EngineStatus/FaultStatus）・期間（プログラム起動からの経過時間）だけ、意図的にCAN送信をスキップしTimeoutを再現する。can.c本体は変更せず、送信関数をラップする新規can_fault.cが担う。ファイルが無ければ従来通り注入なしで動作する |
+| CAN Fault Injection | `can_fault.txt`の`MODE`で、指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的にCAN送信をスキップしTimeoutを再現する（`MODE=DROP`）、またはEngineStatusの送信データを値域外に差し替えInvalid Dataを再現する（`MODE=CORRUPT`、EngineStatusのみ対応）。can.c本体は変更せず、送信関数をラップする新規can_fault.cが担う。ファイルが無ければ従来通り注入なしで動作する |
 
 ---
 
@@ -105,7 +105,7 @@ make test
 | `can.c` | 実CANに準拠したフレーム構造（ID・DLC・data配列）を持つ`CanFrame`と、メッセージごとに最新の1フレームを保持する`CanBus`（バス役）を提供する。エンジンECU役はゲージデータ（`can_send_engine_status`）・警告灯データ（`can_send_fault_status`、`faultmgr.c`の確定状態をビット詰め）を送信する。メーターECU役は受信時に送信タイムスタンプ（`timer.c`）から新しいフレームかを判定し（非ブロッキング方式）、Timeout（新しいフレームが来ない）・Invalid Data（`validate.c`での値域外判定）を`debounce.c`で確定・復帰させる（`CanLinkState`、`FaultManager`とは別カテゴリの通信専用状態） |
 | `dtc_status.c` | DTCの状態区分（`DtcStatus`：NONE/ACTIVE/HISTORY）と、前回/今回の異常有無を比較して発生回数・状態区分を更新する`dtc_status_update`を提供する。異常の発生源（物理センサかCAN通信か等）は一切知らない汎用ロジックで、`diag.c`・`can_diag.c`の両方から呼ばれる |
 | `can_diag.c` | CAN通信リンク別（`CanMessageId`）のDTC相当の記録（`CanDtcRecord`：発生回数・状態区分）を提供する。`CanLinkState`の前回/今回比較を`dtc_status.c`に渡して更新する（`can_diag_check`）。物理センサの`DtcEntry`（`SensorId`）とは別の識別子で持ち、実車のU-code（通信異常）とP-code（物理故障）の分離に倣う |
-| `can_fault.c` | `can_fault.txt`（`MODE=DROP/NORMAL`、`TARGET=ENGINE_STATUS/FAULT_STATUS`、`START_MS`/`END_MS`）を読み込み、指定期間だけ`can.c`の送信関数（`can_send_engine_status`/`can_send_fault_status`）の呼び出しをスキップしてTimeoutを再現する。`can.c`本体は変更せず送信をラップするのみ |
+| `can_fault.c` | `can_fault.txt`（`MODE=DROP/CORRUPT/NORMAL`、`TARGET=ENGINE_STATUS/FAULT_STATUS`、`START_MS`/`END_MS`）を読み込む。`MODE=DROP`は指定期間だけ`can.c`の送信関数（`can_send_engine_status`/`can_send_fault_status`）の呼び出しをスキップしてTimeoutを再現する。`MODE=CORRUPT`はEngineStatusのみ対応し、送信専用の値域外データ（speed/rpm/temp全て`0xFF`）を持つ一時コピーを作って`can_send_engine_status`に渡すことでInvalid Dataを再現する（実センサ値は変更せず物理センサ診断には影響しない。FaultStatusとの組み合わせは無効な指定として注入なし扱い）。`can.c`本体は変更せず送信をラップするのみ |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
 | `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
@@ -122,7 +122,7 @@ make test
 | `test/test_can.c` | can.c の動作確認（`make test`で実行）。ゲージデータ・警告灯データそれぞれの送受信の往復一致、未受信が3回連続した場合のTimeout確定、値域外データが3回連続した場合のInvalid Data確定、有効受信が3回連続した場合のRecoveryを確認する。timer.c/scheduler.cと同様、Timeout解除の確認には実際の待機を伴う |
 | `test/test_dtc_status.c` | dtc_status.c の動作確認（`make test`で実行）。異常発生の瞬間（エッジ）だけ発生回数が増えること、継続中は二重カウントしないこと、解消時のHISTORY遷移、再発生時の再カウントを確認する |
 | `test/test_can_diag.c` | can_diag.c の動作確認（`make test`で実行）。`CanLinkState`のLost確定・Recovery復帰によるDTC相当の記録の更新、メッセージ（EngineStatus/FaultStatus）間の独立性を確認する |
-| `test/test_can_fault.c` | can_fault.c の動作確認（`make test`で実行）。Drop判定（`can_fault_is_dropped`、対象メッセージの一致・時間範囲の境界）と`can_fault.txt`のファイルパース（`can_fault_load`の正常系・異常系）を確認する |
+| `test/test_can_fault.c` | can_fault.c の動作確認（`make test`で実行）。Drop判定（`can_fault_is_dropped`）・Corrupt判定（`can_fault_is_corrupted`）の対象メッセージ一致・時間範囲の境界と、`can_fault.txt`のファイルパース（`can_fault_load`の正常系・異常系、`MODE=CORRUPT`+`TARGET=FAULT_STATUS`が無効な組み合わせとして注入なし扱いになることを含む）を確認する |
 | `test/test_common.c` | test_diag.c・test_persist.c・test_cmd.c・test_alert.c・test_config.cで共通のテスト補助関数（サンプル投入用の`test_feed`/`test_run_sample`、デフォルトの`ConfigData`を返す`test_default_config`）を提供する。Phase13でテスト自体をUnity形式に統一したため、結果判定・サマリ表示（旧`test_check`/`test_summary`）の役割はUnityに置き換わった |
 
 ---
@@ -152,7 +152,7 @@ make test
 | Phase19 | Scheduler（周期処理のタスク管理基盤） | 完了（新規`scheduler.h`/`scheduler.c`を作成。関数ポインタ＋周期を持つタスクを固定長配列で複数保持し、優先度は持たず登録順に判定・実行する最小構成を実装した。`main.c`はサンプル周期タスク（`run_sample_cycle`）を1個登録し、旧`timer_is_due`のポーリング待機を委譲する形に変更。実車OSEK/AUTOSAR OSのoffset（初回起動までの時間）概念を踏まえた上で、タスクが1個のみの現状ではoffsetの効果が無いためoffset機構は実装せず、初回呼び出しは即座に実行する形（offset=0相当）とし、既存の動作（20サンプル・1000ms間隔・初回即時実行）を変えていない。`test/test_scheduler.c`による自動テスト、`make run`での実行確認まで完了） |
 | Phase20 | CAN通信（エンジンECU役→メーターECU役のメッセージ送受信） | 完了（実現方式はSocketCAN不採用・自作フレームシミュレーション採用、プロセス構成は単一プロセス内でSchedulerタスクとして表現する方針を決定。新規`can.h`/`can.c`を作成し、ゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、確定異常フラグをビット詰め、200ms周期）の2メッセージを実装。受信側はTimeout（新しいフレーム未着）・Invalid Data（`validate.c`での値域外）を確定・復帰させる仕組みが必要になり、`faultmgr.c`のDebounce/Recoveryカウント処理を汎用化した新規`debounce.c`に切り出して両方から使う設計にした（`FaultManager`とは別カテゴリの`CanLinkState`として持ち、実車のDTC分類P-code/U-codeの分離に倣う）。`test/test_debounce.c`・`test/test_can.c`による自動テスト、`make run`での実行確認まで完了） |
 | Phase21 | CAN異常処理（Timeout/Invalid DataのDTC反映） | 完了（`diag.c`の`diag_check`から発生回数・状態区分（NONE/ACTIVE/HISTORY）の更新ロジックを新規`dtc_status.c`へ切り出し（物理センサ・CAN通信の共通利用、`debounce.c`と同じ切り出し基準）、新規`can_diag.h`/`can_diag.c`で`CanLinkState`のLost/RecoveryをDTC相当の記録として持たせた。識別子（`SensorId`とCAN用の`CanMessageId`）は分けたまま記録ロジックだけを共有する設計とし、AUTOSAR Demのような完全統一は見送り保留中の候補へ記録した。`test/test_dtc_status.c`・`test/test_can_diag.c`による自動テスト、既存`test_diag.c`（リファクタリング後も検証内容不変）まで確認済み。`make run`ではCAN-DTCの表示形式・既存動作への影響が無いことを確認したが、Lost/Recovery自体の自然発生にはCAN用のFault Injection機構が必要と判明し、実行時の再現は対象外とした（Phase22で対応）） |
-| Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み） |
+| Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み。拡張バックログとして、EngineStatusのInvalid Data注入（`MODE=CORRUPT`、送信専用の破損コピーのみ改ざんし実センサ値は変更しない設計）にも対応した。`test/test_can_fault.c`に4件追加（10→14件）、`make run`でEngineStatusのInvalid Data確定・DTC反映まで確認済み） |
 
 ---
 
@@ -175,7 +175,7 @@ make test
 - CAN受信のTimeout判定は、受信タスクの呼び出し周期が対応する送信タスクの周期とほぼ一致している前提（例: ゲージは両方1000ms）で「前回チェック時から新しいフレームが来たか」を見ており、実車のような絶対時間（経過ms）のしきい値比較ではない。受信タスクの周期を送信タスクより短くすると、送信側は正常でも受信側のチェックが空振りを繰り返すだけで確定回数（3回）に達してしまい、実際より短い時間でTimeoutと誤判定する
 - CAN通信リンクの状態（`CanLinkState`、Timeout/Invalid Data確定）は、DTC記録（`persist.c`）や故障確定（`faultmgr.c`）とは異なり、電源再投入をまたいだ保存はしていない（プログラム起動のたびに`CAN_LINK_OK`から再開する）。診断コード（DTC）への反映はPhase21（`can_diag.c`）で対応済みだが、この反映用の記録（`CanDtcRecord`）自体も同様に永続化はしていない
 - CAN送信タスク・受信タスクは共にイグニッションON時のみ動作するため（OFF中はECU無通電という既存の前提に合わせる）、`can_fault.txt`が無い通常の`make run`ではCANリンクのLost/Recoveryが自然に発生しない（OFF中は送受信双方が止まり、ONに戻れば直ちに新しいフレームを受信するため）。`can_fault.txt`（Phase22）で意図的にTimeoutを発生させれば`make run`でも再現できる
-- CAN Fault Injection（`can_fault.c`）はTimeout（送信スキップ）のみに対応し、Invalid Data（値域外データの意図的な送信）は対象外。また1回の実行で注入できるのは1メッセージ（`TARGET`）のみで、`START_MS`/`END_MS`の大小関係（矛盾した指定）もチェックしていない
+- CAN Fault Injection（`can_fault.c`）はTimeout（送信スキップ、`MODE=DROP`）とInvalid Data（`MODE=CORRUPT`、EngineStatusのみ対応）に対応する。FaultStatusはビットフラグのみでInvalid Data判定ロジックが無いため、`MODE=CORRUPT`+`TARGET=FAULT_STATUS`は無効な組み合わせとして注入なし扱いになる。また1回の実行で注入できるのは1メッセージ（`TARGET`）・1種類（`MODE`）のみで、`START_MS`/`END_MS`の大小関係（矛盾した指定）もチェックしていない
 - `timer_get_elapsed_ms`（`timer.c`）が返す経過時間は、システム起動（OSブート）からの`CLOCK_MONOTONIC`値であり、プログラム起動からの経過時間ではない。`can_fault.c`のように「起動からN秒後」を扱いたい場合は、基準時刻を別途記録し差分を取る必要がある（`timer_is_due`のような前回値との差分計算は、この基準時刻のズレの影響を受けない）
 - 警告灯データ（`CAN_MSG_FAULT_STATUS`）はビットフラグのみのため、Invalid Data判定（`validate.c`）はゲージデータ（`CAN_MSG_ENGINE_STATUS`）にのみ適用しており、警告灯データはTimeout（未受信）のみを確定・復帰の対象にしている
 - Scheduler（`SCHEDULER_MAX_TASKS`=4）は、サンプル周期タスク・CAN送信タスク・CAN受信タスク2個の計4個で上限に達している。今後さらに周期タスクを追加する場合は`SCHEDULER_MAX_TASKS`の見直しが必要になる
