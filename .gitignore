@@ -17,9 +17,12 @@ test_debounce
 test_can
 test_dtc_status
 test_can_diag
+test_can_fault
 dtc_data.txt
 test_dtc_data.txt
 test_config.txt
 config.txt
 fixture.txt
 test_fixture.txt
+can_fault.txt
+test_can_fault.txt

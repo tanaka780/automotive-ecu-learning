@@ -96,14 +96,16 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 
 流れ（Phase20で実装済みの範囲）：
 1. エンジンECU役がゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、200ms周期）をCAN通信でメーターECU役へ送信する
-2. エンジンECU役がイグニッションOFF等で送信を止める（Timeout）、またはセンサ値が値域外になる（Invalid Data、ゲージデータのみ対象）
-3. メーターECU役が3回連続でTimeout/Invalid Dataを検知すると、`CanLinkState`が`CAN_LINK_LOST`に確定する
+2. `can_fault.txt`（Phase22）で指定した期間だけ、意図的に送信を止める（Timeout）
+3. メーターECU役が3回連続でTimeoutを検知すると、`CanLinkState`が`CAN_LINK_LOST`に確定する
 4. 送信が再開し、メーターECU役が3回連続で正常受信すると`CAN_LINK_OK`に復帰する
 
 期待結果：
-- Timeout/Invalid Dataが3回連続発生すると`[CAN] ... link lost`のログが出力される
+- Timeoutが3回連続発生すると`[CAN] ... link lost`のログが出力される
 - 3回連続で正常受信すると`[CAN] ... link recovered`のログが出力される
 - Timeout/Invalid Dataの確定・復帰は、DTC相当の記録（`can_diag.c`、発生回数・状態区分NONE/ACTIVE/HISTORY）にも反映される（Phase21）。ただし電源再投入をまたいだ永続化はしていない（`CanLinkState`・DTC相当の記録とも、プログラム起動のたびに初期状態から再開する）
+
+備考：`can_fault.txt`が無ければ、イグニッションON/OFFの仕組み上送受信が同時に止まり・復帰するためTimeoutは自然発生しない（Phase22のFault Injectionで初めて`make run`上で再現できる）。Invalid Dataを意図的に発生させる仕組みはPhase22の対象外（今後の拡張候補）
 
 ---
 

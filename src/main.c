@@ -17,6 +17,7 @@
 #include "scheduler.h"
 #include "can.h"
 #include "can_diag.h"
+#include "can_fault.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -42,6 +43,7 @@ typedef struct {
     FaultManager      *fault_mgr;
     VehicleStats      *stats;
     CanBus            *can_bus;
+    const CanFaultConfig *can_fault;   /* CAN Fault Injection設定（Phase22）。送信をラップする際に使う */
 } SampleCycleContext;
 
 /* Schedulerに登録するCAN送受信タスクが参照するポインタ一式。エンジンECU役(送信)・メーターECU役(受信)
@@ -52,6 +54,7 @@ typedef struct {
     const FaultManager *fault_mgr;   /* 送信タスク(run_can_send_fault_status)のみ使用 */
     CanMonitor     *can_monitor;     /* 受信タスクのみ使用 */
     CanDtcRecord   *can_dtc;         /* 受信タスクのみ使用（Phase21） */
+    const CanFaultConfig *can_fault; /* 送信タスクのみ使用（Phase22） */
 } CanTaskContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
@@ -90,8 +93,9 @@ static void run_sample_cycle(void *context) {
         stats_update(ctx->stats, &effective_data);         /* 統計データを更新する */
 
         /* ゲージデータ(CAN_MSG_ENGINE_STATUS)は、Degraded中のセンサをフェイルセーフ値に差し替えた
-           effective_dataを送る。実車のダッシュボードもリンプホーム中は縮退後の値を表示するため */
-        can_send_engine_status(ctx->can_bus, &effective_data);
+           effective_dataを送る。実車のダッシュボードもリンプホーム中は縮退後の値を表示するため。
+           can_fault.txtでDrop対象・期間が指定されていれば、意図的に送信しない（Phase22） */
+        can_fault_send_engine_status(ctx->can_fault, ctx->can_bus, &effective_data);
     }
 }
 
@@ -100,7 +104,7 @@ static void run_sample_cycle(void *context) {
 static void run_can_send_fault_status(void *context) {
     CanTaskContext *ctx = (CanTaskContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
-        can_send_fault_status(ctx->can_bus, ctx->fault_mgr);
+        can_fault_send_fault_status(ctx->can_fault, ctx->can_bus, ctx->fault_mgr);
     }
 }
 
@@ -180,6 +184,12 @@ int main(void) {
     CanDtcRecord can_dtc;              /* CAN通信リンクのDTC相当の記録（発生回数・状態区分、Phase21） */
     can_diag_init(&can_dtc);
 
+    /* CAN Fault Injection（Phase22）：can_fault.txtがあれば、指定したメッセージ・期間だけ
+       意図的に送信をスキップする（Timeoutの実行時再現）。ファイルが無い/MODE=NORMALならinactiveのまま */
+    CanFaultConfig can_fault_cfg;
+    can_fault_init(&can_fault_cfg);
+    (void)can_fault_load(&can_fault_cfg, CAN_FAULT_FILENAME);
+
     SampleCycleContext ctx = {
         .sample_index  = 0,
         .ignition      = &ignition,
@@ -191,6 +201,7 @@ int main(void) {
         .fault_mgr     = &fault_mgr,
         .stats         = &stats,
         .can_bus       = &can_bus,
+        .can_fault     = &can_fault_cfg,
     };
 
     /* 警告灯データ送信タスク(エンジンECU役)用。fault_mgrを読むだけで書き換えない */
@@ -200,6 +211,7 @@ int main(void) {
         .fault_mgr   = &fault_mgr,
         .can_monitor = NULL,
         .can_dtc     = NULL,
+        .can_fault   = &can_fault_cfg,
     };
     /* 受信タスク(メーターECU役)用。警告灯・ゲージの両受信タスクで共有する */
     CanTaskContext can_receive_ctx = {
@@ -208,6 +220,7 @@ int main(void) {
         .fault_mgr   = NULL,
         .can_monitor = &can_monitor,
         .can_dtc     = &can_dtc,
+        .can_fault   = NULL,
     };
 
     Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
