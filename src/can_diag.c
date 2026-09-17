@@ -12,9 +12,10 @@ static const char *can_msg_name(CanMessageId msg) {
     }
 }
 
-/* DTC状態区分を表示名に変換する（can_diag_print専用の表示ヘルパー。diag.cのdtc_status_to_strとは
-   ファイルが異なるstatic関数のため同名でも問題ないが、混同しないよう用途をコメントで明示する） */
-static const char *dtc_status_to_str(DtcStatus status) {
+/* DTC状態区分を表示名に変換する（can_diag_print専用の表示ヘルパー。diag.cの同名static関数と
+   識別子が重複していたため、Phase14のMISRA 5.9対応（config_apply_line/fixture_apply_line）と
+   同じ基準でモジュール名を接頭辞にした） */
+static const char *can_diag_dtc_status_to_str(DtcStatus status) {
     switch (status) {
         case DTC_NONE:    return "NONE   ";
         case DTC_ACTIVE:  return "ACTIVE ";
@@ -47,7 +48,7 @@ void can_diag_print(const CanDtcRecord *rec) {
         /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
         (void)snprintf(line, sizeof(line), "%-14s%-8s link lost occurrences: %d",
                         can_msg_name((CanMessageId)i),
-                        dtc_status_to_str(rec->status[i]),
+                        can_diag_dtc_status_to_str(rec->status[i]),
                         (int)rec->count[i]);
         log_print_leveled(LOG_INFO, "CAN-DTC", line);
     }
