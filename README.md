@@ -51,6 +51,12 @@ make clean && make && make run
 make test
 ```
 
+テストカバレッジ計測（Phase23。17テストターゲットそれぞれについて、担当モジュール1つのgcov実行行数割合を表示。`lcov`等によるプロジェクト全体の合算は未導入）:
+
+```bash
+make coverage
+```
+
 ---
 
 ## 現在の実装
@@ -153,6 +159,7 @@ make test
 | Phase20 | CAN通信（エンジンECU役→メーターECU役のメッセージ送受信） | 完了（実現方式はSocketCAN不採用・自作フレームシミュレーション採用、プロセス構成は単一プロセス内でSchedulerタスクとして表現する方針を決定。新規`can.h`/`can.c`を作成し、ゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、確定異常フラグをビット詰め、200ms周期）の2メッセージを実装。受信側はTimeout（新しいフレーム未着）・Invalid Data（`validate.c`での値域外）を確定・復帰させる仕組みが必要になり、`faultmgr.c`のDebounce/Recoveryカウント処理を汎用化した新規`debounce.c`に切り出して両方から使う設計にした（`FaultManager`とは別カテゴリの`CanLinkState`として持ち、実車のDTC分類P-code/U-codeの分離に倣う）。`test/test_debounce.c`・`test/test_can.c`による自動テスト、`make run`での実行確認まで完了） |
 | Phase21 | CAN異常処理（Timeout/Invalid DataのDTC反映） | 完了（`diag.c`の`diag_check`から発生回数・状態区分（NONE/ACTIVE/HISTORY）の更新ロジックを新規`dtc_status.c`へ切り出し（物理センサ・CAN通信の共通利用、`debounce.c`と同じ切り出し基準）、新規`can_diag.h`/`can_diag.c`で`CanLinkState`のLost/RecoveryをDTC相当の記録として持たせた。識別子（`SensorId`とCAN用の`CanMessageId`）は分けたまま記録ロジックだけを共有する設計とし、AUTOSAR Demのような完全統一は見送り保留中の候補へ記録した。`test/test_dtc_status.c`・`test/test_can_diag.c`による自動テスト、既存`test_diag.c`（リファクタリング後も検証内容不変）まで確認済み。`make run`ではCAN-DTCの表示形式・既存動作への影響が無いことを確認したが、Lost/Recovery自体の自然発生にはCAN用のFault Injection機構が必要と判明し、実行時の再現は対象外とした（Phase22で対応）） |
 | Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み。拡張バックログとして、EngineStatusのInvalid Data注入（`MODE=CORRUPT`、送信専用の破損コピーのみ改ざんし実センサ値は変更しない設計）にも対応した。`test/test_can_fault.c`に4件追加（10→14件）、`make run`でEngineStatusのInvalid Data確定・DTC反映まで確認済み） |
+| Phase23 | テストカバレッジ計測（gcov） | 完了（17テストターゲットそれぞれについて、既存のソース構成を再利用した`--coverage`付きビルド（`xxx_cov`）を追加し、担当モジュール1つのgcov実行行数割合を`make coverage`で一括表示できるようにした。プロジェクト全体を1つの数値に合算する`lcov`導入は、共有モジュールが複数ターゲットにまたがる場合に自動では合算されないことを実験で確認した上で、必要性が高まった場合の拡張候補として見送った。`main.c`はUnityとリンクできないため対象外のまま） |
 
 ---
 
@@ -181,3 +188,4 @@ make test
 - Scheduler（`SCHEDULER_MAX_TASKS`=4）は、サンプル周期タスク・CAN送信タスク・CAN受信タスク2個の計4個で上限に達している。今後さらに周期タスクを追加する場合は`SCHEDULER_MAX_TASKS`の見直しが必要になる
 - `timer_get_elapsed_ms`が返す経過時間（`uint32_t`のミリ秒）は、約49.7日（2^32ミリ秒）で桁あふれする。本プロジェクトの実行時間（1回数十秒）では問題にならないが、実車ECUの連続稼働のような長時間動作は想定していない。またサンプル周期の待機は、コールバックによる自動起動ではなく短い間隔（10ms）でのポーリングのため、ポーリング間隔の分だけ周期にわずかな遅延が生じうる
 - Scheduler（`scheduler.c`）は優先度・オーバーラン検出を持たず、登録数も固定上限（`SCHEDULER_MAX_TASKS`、4個）で周期0ms・重複登録への防御もない最小構成。実車OSEK/AUTOSAR OSが持つoffset（複数タスクの起動タイミングを意図的にずらし、CPU/バス負荷のスパイクを避ける仕組み）も、タスクが1個のみの現状では効果が無いため実装していない
+- テストカバレッジ計測（`make coverage`）は17テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない

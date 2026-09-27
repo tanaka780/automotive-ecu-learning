@@ -26,3 +26,7 @@ fixture.txt
 test_fixture.txt
 can_fault.txt
 test_can_fault.txt
+*_cov
+*.gcno
+*.gcda
+*.gcov

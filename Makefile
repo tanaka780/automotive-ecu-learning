@@ -12,6 +12,10 @@ CFLAGS = -Wall -Wextra -std=c11 -Iinclude
 UNITY_DIR = vendor/unity
 TEST_CFLAGS = $(CFLAGS) -I$(UNITY_DIR)
 
+# カバレッジ計測用（Phase23）: TEST_CFLAGSに--coverageを追加しただけの専用フラグ。
+# 通常のtest_xxx（TEST_CFLAGS）とは別の実行ファイル（xxx_cov）をビルドするため、既存のtest_xxxには影響しない
+TEST_CFLAGS_COV = $(TEST_CFLAGS) --coverage
+
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
 SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c src/can_fault.c
@@ -111,7 +115,7 @@ TEST_CAN_FAULT_TARGET = test_can_fault
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
 # なり、テストが1つも実行されないまま終わってしまう
-.PHONY: all run test clean
+.PHONY: all run test clean coverage
 
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
@@ -172,6 +176,76 @@ $(TEST_CAN_DIAG_TARGET): $(TEST_CAN_DIAG_SRCS)
 $(TEST_CAN_FAULT_TARGET): $(TEST_CAN_FAULT_SRCS)
 	$(CC) $(TEST_CFLAGS) $(TEST_CAN_FAULT_SRCS) -o $(TEST_CAN_FAULT_TARGET)
 
+# カバレッジ計測用のビルドルール（Phase23）。ソースは既存のTEST_X_SRCSをそのまま再利用し、
+# --coverageを付けた別の実行ファイル（xxx_cov）としてビルドする
+test_diag_cov: $(TEST_DIAG_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_DIAG_SRCS) -o test_diag_cov
+
+test_persist_cov: $(TEST_PERSIST_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_PERSIST_SRCS) -o test_persist_cov
+
+test_stats_cov: $(TEST_STATS_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_STATS_SRCS) -o test_stats_cov
+
+test_alert_cov: $(TEST_ALERT_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_ALERT_SRCS) -o test_alert_cov
+
+test_ignition_cov: $(TEST_IGNITION_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_IGNITION_SRCS) -o test_ignition_cov
+
+test_cmd_cov: $(TEST_CMD_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_CMD_SRCS) -o test_cmd_cov
+
+test_config_cov: $(TEST_CONFIG_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_CONFIG_SRCS) -o test_config_cov
+
+test_fixture_cov: $(TEST_FIXTURE_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_FIXTURE_SRCS) -o test_fixture_cov
+
+test_validate_cov: $(TEST_VALIDATE_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_VALIDATE_SRCS) -o test_validate_cov
+
+test_faultmgr_cov: $(TEST_FAULTMGR_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_FAULTMGR_SRCS) -o test_faultmgr_cov
+
+test_timer_cov: $(TEST_TIMER_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_TIMER_SRCS) -o test_timer_cov
+
+test_scheduler_cov: $(TEST_SCHEDULER_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_SCHEDULER_SRCS) -o test_scheduler_cov
+
+test_debounce_cov: $(TEST_DEBOUNCE_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_DEBOUNCE_SRCS) -o test_debounce_cov
+
+test_can_cov: $(TEST_CAN_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_CAN_SRCS) -o test_can_cov
+
+test_dtc_status_cov: $(TEST_DTC_STATUS_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_DTC_STATUS_SRCS) -o test_dtc_status_cov
+
+test_can_diag_cov: $(TEST_CAN_DIAG_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_CAN_DIAG_SRCS) -o test_can_diag_cov
+
+test_can_fault_cov: $(TEST_CAN_FAULT_SRCS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_CAN_FAULT_SRCS) -o test_can_fault_cov
+
+# カバレッジ計測ターゲット: 17ターゲットそれぞれを実行し、担当モジュール（xxx_covに対応する1つの.c）の
+# gcov結果（実行行数の割合）を表示する。ターゲット名と担当モジュール名の対応（1ユニット=1テストスイート）
+COVERAGE_PAIRS = test_diag:diag test_persist:persist test_stats:stats test_alert:alert \
+	test_ignition:ignition test_cmd:cmd test_config:config test_fixture:fixture \
+	test_validate:validate test_faultmgr:faultmgr test_timer:timer test_scheduler:scheduler \
+	test_debounce:debounce test_can:can test_dtc_status:dtc_status test_can_diag:can_diag \
+	test_can_fault:can_fault
+
+coverage: test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignition_cov test_cmd_cov test_config_cov test_fixture_cov test_validate_cov test_faultmgr_cov test_timer_cov test_scheduler_cov test_debounce_cov test_can_cov test_dtc_status_cov test_can_diag_cov test_can_fault_cov
+	@for pair in $(COVERAGE_PAIRS); do \
+		target=$${pair%%:*}; \
+		module=$${pair##*:}; \
+		./$${target}_cov > /dev/null; \
+		echo "--- $$target ($$module.c) ---"; \
+		gcov $${target}_cov-$$module.gcno 2>&1 | grep "Lines executed"; \
+	done
+
 # 実行ターゲット: make run でビルド後に実行する
 run: $(TARGET)
 	./$(TARGET)
@@ -199,3 +273,4 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
 	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET)
+	rm -f *_cov *.gcno *.gcda *.gcov
