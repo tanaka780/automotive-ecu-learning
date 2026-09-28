@@ -27,11 +27,11 @@ AIは実装、整理、レビューの補助として使用しますが、目的
 作業を始める前に、必要に応じて以下を確認します。
 
 * README.md
-* project_context.md
-* study_plan.md
-* learning_journal.md
-* AI_workflow.md
-* daily_log/ 配下の最新Day
+* docs/project_context.md
+* docs/study_plan.md
+* docs/learning_journal.md
+* docs/AI_workflow.md
+* docs/daily_log/ 配下の最新Day
 * src/
 * include/
 * Makefile
@@ -104,12 +104,12 @@ AIは、以下のような補助に使います。
 各ファイルの役割は以下の通りです。
 
 * `CLAUDE.md`：AI支援ツールに共有するプロジェクトの前提・作業ルール（このファイル）
-* `AI_workflow.md`：学習者本人のAI活用方針
+* `docs/AI_workflow.md`：学習者本人のAI活用方針
 * `README.md`：第三者向けの概要、機能、構成、実行方法
-* `project_context.md`：現在の実装状況、モジュール構成、次回作業の前提
-* `study_plan.md`：長期的な学習計画とPhase構成
-* `learning_journal.md`：学んだことを短く整理する理解メモ
-* `daily_log/`：その日の作業内容、理解したこと、曖昧なこと、次回方針
+* `docs/project_context.md`：現在の実装状況、モジュール構成、次回作業の前提
+* `docs/study_plan.md`：長期的な学習計画とPhase構成
+* `docs/learning_journal.md`：学んだことを短く整理する理解メモ
+* `docs/daily_log/`：その日の作業内容、理解したこと、曖昧なこと、次回方針
 
 README.md は概要資料として保ち、daily_log のように細かく書きすぎないようにします。
 learning_journal.md は、後から見返すための短い理解メモとして整理します。

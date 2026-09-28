@@ -27,7 +27,20 @@ C言語未経験から始め、車載ECUで使われる考え方を小規模な�
 
 Phase10以降も新しい技術（Timer・Scheduler・CAN・Watchdog・Python等）の学習自体は続くが、テーマを選ぶ基準は「学習順序として妥当か」から「ECUの完成ストーリーに必要か」（CLAUDE.md記載の判断順序）へ変わる。
 
-Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築期間として位置付ける。Phase10以降の方向性は study_plan.md を参照。代表的な車両シナリオ（正常走行／故障発生／診断コマンド／電源再投入／設定ファイル異常時のフェイルセーフ／通信故障）は docs/scenarios.md を参照。
+Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築期間として位置付ける。Phase10以降の方向性は docs/study_plan.md を参照。代表的な車両シナリオ（正常走行／故障発生／診断コマンド／電源再投入／設定ファイル異常時のフェイルセーフ／通信故障）は docs/scenarios.md を参照。
+
+---
+
+## ドキュメント
+
+| ファイル | 内容 |
+| --- | --- |
+| [docs/project_context.md](docs/project_context.md) | 現在の実装状況・モジュール構成 |
+| [docs/study_plan.md](docs/study_plan.md) | 学習計画とPhase構成 |
+| [docs/scenarios.md](docs/scenarios.md) | 車両シナリオの定義 |
+| [docs/learning_journal.md](docs/learning_journal.md) | 学んだことの理解メモ |
+| [docs/daily_log/](docs/daily_log/) | 日ごとの作業記録 |
+| [docs/AI_workflow.md](docs/AI_workflow.md) | AI活用方針 |
 
 ---
 
@@ -160,6 +173,7 @@ make coverage
 | Phase21 | CAN異常処理（Timeout/Invalid DataのDTC反映） | 完了（`diag.c`の`diag_check`から発生回数・状態区分（NONE/ACTIVE/HISTORY）の更新ロジックを新規`dtc_status.c`へ切り出し（物理センサ・CAN通信の共通利用、`debounce.c`と同じ切り出し基準）、新規`can_diag.h`/`can_diag.c`で`CanLinkState`のLost/RecoveryをDTC相当の記録として持たせた。識別子（`SensorId`とCAN用の`CanMessageId`）は分けたまま記録ロジックだけを共有する設計とし、AUTOSAR Demのような完全統一は見送り保留中の候補へ記録した。`test/test_dtc_status.c`・`test/test_can_diag.c`による自動テスト、既存`test_diag.c`（リファクタリング後も検証内容不変）まで確認済み。`make run`ではCAN-DTCの表示形式・既存動作への影響が無いことを確認したが、Lost/Recovery自体の自然発生にはCAN用のFault Injection機構が必要と判明し、実行時の再現は対象外とした（Phase22で対応）） |
 | Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み。拡張バックログとして、EngineStatusのInvalid Data注入（`MODE=CORRUPT`、送信専用の破損コピーのみ改ざんし実センサ値は変更しない設計）にも対応した。`test/test_can_fault.c`に4件追加（10→14件）、`make run`でEngineStatusのInvalid Data確定・DTC反映まで確認済み） |
 | Phase23 | テストカバレッジ計測（gcov） | 完了（17テストターゲットそれぞれについて、既存のソース構成を再利用した`--coverage`付きビルド（`xxx_cov`）を追加し、担当モジュール1つのgcov実行行数割合を`make coverage`で一括表示できるようにした。プロジェクト全体を1つの数値に合算する`lcov`導入は、共有モジュールが複数ターゲットにまたがる場合に自動では合算されないことを実験で確認した上で、必要性が高まった場合の拡張候補として見送った。`main.c`はUnityとリンクできないため対象外のまま） |
+| Phase24 | フォルダ構成の再編成（BSW/アプリ層分割） | 配置の検討（タスク1）のみ完了。PC依存の処理はファイル単位ではなく各ファイル内の一部の関数に限られており、ファイル単位で層に振り分けると層の意味が崩れるため、`src/`の移動は行わず、ドキュメント類の`docs/`への集約のみ実施した |
 
 ---
 

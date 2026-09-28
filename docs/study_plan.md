@@ -592,7 +592,7 @@ Day45時点でPhase22本来のタスク（Drop方式によるTimeout再現）は
 
 ### タスク
 
-- [ ] 各既存モジュール（`src/`・`include/`配下）を、application層／platform層／bsw_pc層のどこに配置するかを決める（`bsw_target`層はフォルダのみ用意し、着手まで空のままとする）
+- [x] 各既存モジュール（`src/`・`include/`配下）を、application層／platform層／bsw_pc層のどこに配置するかを決める（`bsw_target`層はフォルダのみ用意し、着手まで空のままとする）
 - [ ] 上記の配置に沿ってディレクトリを新設し、ファイルを移動する
 - [ ] 移動後も既存の17テストターゲットが同じ内容でPASSし、`sensor_sim`が移動前と同じ動作をすることを実行確認する
 
@@ -613,7 +613,7 @@ Phase1〜9では、自動車関連プログラムに使われる個々の機能�
 - 診断コマンド：Ignition OFF時にスキャンツール入力を想定した`clear`／`clear <センサ名>`でDTCをクリア
 - 電源再投入：Ignition OFF時にDTC等の診断情報をNVMへ保存 → ECU再起動時にNVMから復元
 - 設定ファイル異常時のフェイルセーフ：config.txtが無い/壊れている場合、デフォルト値で動作を継続（リンプホームモード）
-- 通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection（Phase20で実装済み） → DTC（Phase21で対応予定）
+- 通信故障：ECU間CAN通信のTimeout/Invalid Data → Fault Detection（Phase20で実装済み） → DTC（Phase21で実装済み）
 
 詳細な入出力・期待結果は、docs/scenarios.md として整理した（Phase10で完了）。
 
