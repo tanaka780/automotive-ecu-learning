@@ -30,3 +30,4 @@ test_can_fault.txt
 *.gcno
 *.gcda
 *.gcov
+__pycache__/

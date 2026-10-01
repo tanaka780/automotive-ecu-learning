@@ -115,7 +115,7 @@ TEST_CAN_FAULT_TARGET = test_can_fault
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
 # なり、テストが1つも実行されないまま終わってしまう
-.PHONY: all run test clean coverage
+.PHONY: all run test clean coverage scenario
 
 # デフォルトターゲット: make だけ打つとこれが実行される
 all: $(TARGET)
@@ -269,6 +269,11 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_DTC_STATUS_TARGET)
 	./$(TEST_CAN_DIAG_TARGET)
 	./$(TEST_CAN_FAULT_TARGET)
+
+# シナリオ検証ターゲット（Phase25）: sensor_simをPythonから実行し、docs/scenarios.mdの期待結果と照合する。
+# 1条件につきsensor_simを最後まで動かす（約20秒）ため、make testには含めず別ターゲットにしている
+scenario: $(TARGET)
+	python3 -m unittest discover -s scenario_test -v
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:

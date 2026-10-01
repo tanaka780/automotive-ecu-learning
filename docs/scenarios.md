@@ -132,7 +132,7 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 - 2回目の起動直後、1回目で記録されたDTCの発生回数・状態区分が引き継がれている
 - エッジ検出用の前回状態（previous）は、2回目の起動時点でNORMALにリセットされている（保存対象外のため）
 - 保存ファイルが無い場合（初回起動）は、DTC0件の初期状態から開始する
-- 起動時自己診断は、`config.txt`と`dtc_data.txt`が両方読み込めた場合のみ`[POST] Self-check passed`、どちらかが無い・壊れている場合は`[POST] Self-check did not pass, continuing with defaults`となり、どちらの場合も動作を継続する
+- 起動時自己診断は、`config.txt`と`dtc_data.txt`が両方読み込めた場合のみ`[POST] Self-check passed`、`config.txt`が無い場合、または`dtc_data.txt`が無い・壊れている場合は`[POST] Self-check did not pass, continuing with defaults`となり、どちらの場合も動作を継続する（`config.txt`は内容が壊れていても、ファイルが開ければ読み込めた扱いになる）
 - メーターECUの通信異常の記録（`can_diag.c`）は永続化していない。3ECU構成ではメーターECU側のデータになるため、ECU間通信の実現方式を決めた後に扱う
 
 ---
@@ -151,8 +151,8 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 - 閾値はalert.h/status.hのデフォルト値（`config_init`相当）のまま動作する
 - ログレベルはデフォルト（LOG_INFO、全ログ表示）のまま動作する
 - プログラムが異常終了せず、サンプルループが最後まで実行される
-- `[CONFIG] No config file (using defaults)`のログが表示される
-- config.txtが無い場合、`[POST] Self-check did not pass, continuing with defaults`が表示される
+- config.txtが無い場合、`[CONFIG] No config file (using defaults)`と`[POST] Self-check did not pass, continuing with defaults`が表示される
+- config.txtはあるが内容が壊れている場合、`[CONFIG] Loaded config file`が表示され、解釈できない行・値域外の値は無視される。起動時自己診断はファイルが読み込めたかだけを見るため、`dtc_data.txt`も読み込めていれば`[POST] Self-check passed`になる
 
 ---
 
@@ -183,4 +183,4 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 
 正常走行／故障発生／診断コマンド／電源再投入は、study_plan.mdのPhase11（固定値注入によるシナリオ再現の仕組み構築）で、config.txtと同様のKEY=VALUE形式によりセンサ固定値（speed/rpm/temperature）を注入できるようにしてから、上記の期待結果を実際に確認する。診断コマンドのシナリオでは、注入したセンサ値でDTCを発生させた後、`cmd_dispatch`に直接コマンド文字列を渡すことで（test/test_cmd.cと同じやり方で）再現する。
 
-設定ファイル異常時のフェイルセーフは、センサ値の注入ではなくconfig.txtファイル自体の有無・内容を変えることで再現する（test/test_config.cの`write_raw`と同じやり方）。Phase11の対象には含めない。
+設定ファイル異常時のフェイルセーフは、センサ値の注入ではなくconfig.txtファイル自体の有無・内容を変えることで再現する（test/test_config.cの`write_raw`と同じやり方）。Phase11の対象には含めない。このシナリオの期待結果は、`make scenario`（Phase25）で自動検証している。
