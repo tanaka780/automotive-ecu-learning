@@ -90,6 +90,36 @@ static void test_event_on_to_off(void) {
     TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[IGN] ON -> OFF") != NULL, "ON->OFF: [IGN] ON -> OFF が出力される");
 }
 
+/* ignition_setで指定した状態がcurrentに入り、直前のcurrentがpreviousに残ることを確認する（Phase25） */
+static void test_set_keeps_previous(void) {
+    Ignition ign;
+    ignition_init(&ign);   /* previous=OFF, current=OFF */
+
+    ignition_set(&ign, IGNITION_ON);
+    TEST_ASSERT_TRUE_MESSAGE(ign.previous == IGNITION_OFF, "set(ON)1回目: previousは直前のOFF");
+    TEST_ASSERT_TRUE_MESSAGE(ign.current == IGNITION_ON, "set(ON)1回目: currentはON");
+
+    ignition_set(&ign, IGNITION_ON);
+    TEST_ASSERT_TRUE_MESSAGE(ign.previous == IGNITION_ON, "set(ON)2回目: previousは直前のON");
+    TEST_ASSERT_TRUE_MESSAGE(ign.current == IGNITION_ON, "set(ON)2回目: currentはON");
+}
+
+/* ignition_setで同じ状態を続けた場合、遷移イベントは最初の1回だけ出力されることを確認する（Phase25）。
+   イグニッションをONに固定した実行で、[IGN] OFF -> ONが1回だけ出ることに対応する */
+static void test_set_same_state_reports_transition_once(void) {
+    Ignition ign;
+    ignition_init(&ign);
+    char buf[CAPTURE_BUF_SIZE];
+
+    ignition_set(&ign, IGNITION_ON);
+    capture_ignition_check(&ign, buf, sizeof(buf));
+    TEST_ASSERT_TRUE_MESSAGE(strstr(buf, "[IGN] OFF -> ON") != NULL, "固定1回目: [IGN] OFF -> ON が出力される");
+
+    ignition_set(&ign, IGNITION_ON);
+    capture_ignition_check(&ign, buf, sizeof(buf));
+    TEST_ASSERT_TRUE_MESSAGE(strlen(buf) == 0, "固定2回目: 出力なし");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -97,6 +127,8 @@ int main(void) {
     RUN_TEST(test_no_event_on_to_on);
     RUN_TEST(test_event_off_to_on);
     RUN_TEST(test_event_on_to_off);
+    RUN_TEST(test_set_keeps_previous);
+    RUN_TEST(test_set_same_state_reports_transition_once);
 
     return UNITY_END();
 }

@@ -85,3 +85,56 @@ bool fixture_apply(VehicleSensorData *data, const char *filename) {
     log_print_leveled(LOG_INFO, "FIXTURE", "Loaded fixture file (RANDOM mode)");
     return false;
 }
+
+/* "IGNITION=ON/OFF" の1行を解釈し、有効ならvalueに入れてtrueを返す。
+   IGNITION以外のキーと、ON/OFF以外の値（小文字・数値・空を含む）は無視する（MODEと同じく厳密に比較する） */
+static bool fixture_ignition_line(const char *line, IgnitionState *value) {
+    char key[FIXTURE_LINE_SIZE];
+    char str_value[FIXTURE_LINE_SIZE];
+
+    if (sscanf(line, "%63[^=]=%63s", key, str_value) != 2) {
+        return false;
+    }
+    if (strcmp(key, "IGNITION") != 0) {
+        return false;
+    }
+
+    if (strcmp(str_value, "ON") == 0) {
+        *value = IGNITION_ON;
+        return true;
+    }
+    if (strcmp(str_value, "OFF") == 0) {
+        *value = IGNITION_OFF;
+        return true;
+    }
+    return false;
+}
+
+/* fixture_applyとは別に、同じファイルをもう一度開いてIGNITION行だけを読む。
+   fixture_applyはIGNITIONを未知のキーとして無視するため、センサ値の固定の動作は変わらない */
+bool fixture_load_ignition(IgnitionState *state, const char *filename) {
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return false;   /* ファイルが無いことはfixture_applyがログに出しているため、ここでは出さない */
+    }
+
+    bool found = false;
+    IgnitionState value = IGNITION_OFF;
+    char line[FIXTURE_LINE_SIZE];
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (fixture_ignition_line(line, &value)) {
+            found = true;   /* 後に書かれた有効な行で上書きされる（後勝ち） */
+        }
+    }
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
+
+    if (!found) {
+        return false;
+    }
+
+    *state = value;
+    log_print_leveled(LOG_INFO, "FIXTURE",
+                      (value == IGNITION_ON) ? "Ignition fixed: ON" : "Ignition fixed: OFF");
+    return true;
+}

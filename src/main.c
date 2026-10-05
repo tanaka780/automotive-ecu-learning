@@ -35,6 +35,8 @@
 typedef struct {
     int               sample_index;    /* "[Sample XX]"表示・完了判定用。run_sample_cycle自身が更新する（Phase20） */
     Ignition          *ignition;
+    bool              ignition_fixed;        /* fixture.txtのIGNITIONで固定する場合true（Phase25） */
+    IgnitionState     ignition_fixed_state;  /* ignition_fixedがtrueのときに使う状態 */
     bool              fixture_fixed;
     VehicleSensorData *sensor_data;
     const ConfigData  *config;
@@ -69,7 +71,11 @@ static void run_sample_cycle(void *context) {
     /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
     (void)snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", ctx->sample_index);
     log_print(sample_line);
-    ignition_update(ctx->ignition);                   /* イグニッション状態を更新する (書く) */
+    if (ctx->ignition_fixed) {
+        ignition_set(ctx->ignition, ctx->ignition_fixed_state); /* fixture.txtで固定した状態で更新する (書く) */
+    } else {
+        ignition_update(ctx->ignition);               /* イグニッション状態を更新する (書く) */
+    }
     ignition_print(ctx->ignition);                    /* イグニッション状態を表示する (読む) */
     ignition_check(ctx->ignition);                     /* 遷移した瞬間だけイベントを表示する (読む) */
 
@@ -142,6 +148,9 @@ int main(void) {
     sensor_init(&sensor_data);
     /* fixture.txtがあればセンサ値を固定値に差し替える。trueならループ内でsensor_updateを呼ばない */
     bool fixture_fixed = fixture_apply(&sensor_data, FIXTURE_FILENAME);
+    /* fixture.txtにIGNITION行があればイグニッションも固定する。falseならループ内でignition_updateを使う（Phase25） */
+    IgnitionState fixed_ignition = IGNITION_OFF;
+    bool ignition_fixed = fixture_load_ignition(&fixed_ignition, FIXTURE_FILENAME);
 
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
@@ -193,6 +202,8 @@ int main(void) {
     SampleCycleContext ctx = {
         .sample_index  = 0,
         .ignition      = &ignition,
+        .ignition_fixed       = ignition_fixed,
+        .ignition_fixed_state = fixed_ignition,
         .fixture_fixed = fixture_fixed,
         .sensor_data   = &sensor_data,
         .config        = &config,

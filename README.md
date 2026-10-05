@@ -90,12 +90,12 @@ make scenario
 | 固定幅整数型 | センサ値・統計値を `uint8_t` / `uint16_t` / `uint32_t` で型明示 |
 | DTC記録 | CRITICALに入った瞬間を検出し、センサ別の発生回数と状態区分（ACTIVE / HISTORY）を記録・表示 |
 | フリーズフレーム | 最初にCRITICALが発生した瞬間の全センサ値を1件だけ記録・表示 |
-| イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示 |
+| イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示。`fixture.txt`の`IGNITION=ON/OFF`で実行中ずっと固定することもできる |
 | DTC永続化 | プログラム終了時にDTC記録をテキストファイルへ保存し、次回起動時に読み込んで継続する |
 | 診断コマンド | プログラム終了時、イグニッションOFF時のみ`clear`コマンドを入力すると全DTC記録を、`clear <センサ名>`（speed/rpm/temp）を入力すると指定センサ1件分のDTC記録だけをリセットできる（UDS風のDTCクリアの簡易再現）。フリーズフレームは、その原因がクリア対象のセンサと一致する場合だけ合わせてリセットする。イグニッションON時はコマンドを受け付けず、受け付けなかった旨を表示する |
 | 閾値の外部設定 | `config.txt`（`KEY=VALUE`形式）から警告・状態判定の閾値9個を読み込む。ファイルが無ければデフォルト値（`alert.h`/`status.h`のマクロ値）のまま動作する |
 | ログレベル制御 | `config.txt`の`LOG_LEVEL`（0=INFO/1=WARNING/2=ERROR）で実行時のログ表示閾値を切り替える。`ALERT`はWARNING、`PERSIST`の保存失敗・データ破損はERROR、それ以外はINFOとして扱う |
-| センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する |
+| センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する。`IGNITION=ON/OFF`の行があれば、`MODE`に関係なくイグニッションも固定する |
 | 入力値域チェック | `config.txt`（閾値）・`fixture.txt`（センサ固定値）から読み込んだ値が、センサごとの物理的にありえる範囲（speed 0〜120／rpm 0〜6000／temp 25〜100）・LOG_LEVELの範囲（0〜2）に収まっているかを検証する。範囲外の値はそのキーだけ無視され、他のキーは反映される |
 | 故障確定とFail-safe | センサ別にCRITICALが3回連続したら「一時的なノイズ」ではなく確定した異常（Degraded）とみなし（Debounce）、確定後はそのセンサの値をフェイルセーフ値に差し替えて警告・統計に反映する（縮退動作）。NORMALが3回連続したら復帰する（Recovery）。DTC記録・診断コマンド（`clear`）はDegraded状態と独立して動作する |
 | 起動時自己診断（POST） | 起動時に`config.txt`・`dtc_data.txt`の読み込み結果を合成し、両方成功なら`[POST] Self-check passed`、いずれか失敗なら`[POST] Self-check did not pass, continuing with defaults`を表示する。判定結果で動作を変えるものではなく、既存のフェイルセーフ（デフォルト値継続）を可視化するのみ |
@@ -118,11 +118,11 @@ make scenario
 | `status.c` | センサ値の状態分類（NORMAL / WARNING / CRITICAL）と表示 |
 | `diag.c` | DTC（故障診断コード）の記録・表示、フリーズフレームの記録、全体クリア（`diag_clear`）とセンサ単位クリア（`diag_clear_sensor`）。発生回数・状態区分（NONE/ACTIVE/HISTORY）の更新自体は`dtc_status.c`に委譲する |
 | `logger.c` | 出力の窓口の一元化。タグなし（`log_print`）・タグ付き（`log_print_tagged`）に加え、レベル付き（`log_print_leveled`）で`logger_set_level`が設定した表示閾値未満のログを抑制する |
-| `ignition.c` | イグニッション状態（OFF/ON）の更新・遷移検出・表示 |
+| `ignition.c` | イグニッション状態（OFF/ON）の更新（ランダムの`ignition_update`、指定した状態の`ignition_set`）・遷移検出・表示 |
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
 | `cmd.c` | 標準入力から診断コマンド（`clear`／`clear <センサ名>`相当）を読み込み、解釈してDTC記録のクリア（全体／センサ単位）を要求する。想定外の入力は理由に応じて区別して通知する。イグニッションOFF時のみという受付条件を満たさない場合の通知（`cmd_notify_rejected`）も担う |
 | `config.c` | 閾値9個（alert.c/status.c）とログレベル（`LOG_LEVEL`）の設定値を保持し、`KEY=VALUE`形式の設定ファイルから読み込む（ファイルが無ければデフォルト値のまま）。読み込んだ値はvalidate.cで値域チェックしたうえで反映し、alert.c/status.cの判定、およびlogger.cの表示閾値に反映される |
-| `sim/fixture.c` | `fixture.txt`を`KEY=VALUE`形式で読み込む。`MODE=FIXED`なら`SPEED`/`RPM`/`TEMP`をvalidate.cで値域チェックしたうえでセンサ値に反映し、`main.c`はそれ以降の`sensor_update`呼び出しをスキップする。`MODE=RANDOM`・ファイル無し・`MODE`未指定の場合は何もせず、従来通りランダムに動作する |
+| `sim/fixture.c` | `fixture.txt`を`KEY=VALUE`形式で読み込む。`MODE=FIXED`なら`SPEED`/`RPM`/`TEMP`をvalidate.cで値域チェックしたうえでセンサ値に反映し、`main.c`はそれ以降の`sensor_update`呼び出しをスキップする。`MODE=RANDOM`・ファイル無し・`MODE`未指定の場合は何もせず、従来通りランダムに動作する。`IGNITION=ON/OFF`の行は別の関数（`fixture_load_ignition`）が読み、`MODE`に関係なくイグニッションを固定する（`main.c`は`ignition_update`の代わりに`ignition_set`を呼ぶ） |
 | `validate.c` | `SensorId`（sensor.h）をインデックスにした値域テーブル（min/max）を持ち、値がセンサごとの物理的な範囲内かを判定する（`validate_in_range`）。LOG_LEVEL用に0〜2の範囲チェック（`validate_log_level`）も別途提供する。config.c・fixture.cの両方から呼ばれる |
 | `faultmgr.c` | センサ別に`status_check`の分類結果を見て、CRITICALの連続回数（Debounce）・確定後のNORMAL連続回数（Recovery）をカウントし、確定(Degraded)・復帰(Recovery)を判定する。Degraded中のセンサ値をフェイルセーフ値に差し替えたコピーを作る（`faultmgr_apply_safe_values`）。`main.c`は`diag_check`より後・`alert_check`/`stats_update`より前にこの差し替えを適用し、診断の正確性（raw値）と縮退動作の継続（フェイルセーフ値）を両立させる |
 | `timer.c` | 単調増加クロック（`CLOCK_MONOTONIC`）による起動からの経過時間取得（`timer_get_elapsed_ms`）と、周期判定（`timer_is_due`）を提供する。`main.c`はサンプルループの待機（旧`sleep(1)`）をこの周期判定のポーリングに置き換えている |
@@ -136,10 +136,10 @@ make scenario
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
 | `test/test_stats.c` | 固定値データによる stats.c の動作確認（`make test`で実行）。サンプル投入用のヘルパーは test_common.c を使わずファイル内にローカルで定義 |
 | `test/test_alert.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による alert.c の動作確認（`make test`で実行）。閾値境界・単独超過・複数同時超過時の警告出力を確認する |
-| `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する |
+| `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する。`ignition_set`で前回の状態が`previous`に残ること、同じ状態を続けても遷移イベントは最初の1回だけであることも確認する |
 | `test/test_cmd.c` | 固定値データによる `diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ等）の動作確認（`make test`で実行）。標準入力を扱う `cmd_read_line` は対象外（`make run`での実行確認で扱う） |
 | `test/test_config.c` | 固定値データによる `config_load` のファイルパース動作確認（`make test`で実行）。正常系（全9キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち）を確認する |
-| `test/test_fixture.c` | 固定値データによる `fixture_apply` のファイルパース動作確認（`make test`で実行）。正常系（`MODE=FIXED`で全キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち、`MODE=RANDOM`時はセンサ値を変更しない）を確認する |
+| `test/test_fixture.c` | 固定値データによる `fixture_apply` のファイルパース動作確認（`make test`で実行）。正常系（`MODE=FIXED`で全キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち、`MODE=RANDOM`時はセンサ値を変更しない）を確認する。`fixture_load_ignition`についても、ON/OFFの反映、行・ファイルが無い場合、不正な値の無視、後勝ち、`MODE`に関係なく有効なことを確認する |
 | `test/test_validate.c` | 固定値による `validate_in_range`・`validate_log_level` の境界値確認（`make test`で実行）。speed/rpm/temp各センサの下限・上限・範囲外、不正な`SensorId`、LOG_LEVELの下限・上限・範囲外を確認する |
 | `test/test_faultmgr.c` | 固定値による `faultmgr_check`・`faultmgr_apply_safe_values` の動作確認（`make test`で実行）。Debounce確定前後の境界、連続が途切れた場合のカウント数え直し、Recoveryの境界（WARNING止まりでは復帰しない）、複数センサの独立性、フェイルセーフ値差し替え時のraw非破壊を確認する |
 | `test/test_timer.c` | timer.c の動作確認（`make test`で実行）。経過時間の単調増加、周期判定（`timer_is_due`）がinit直後はfalse・周期経過後はtrue・trueを返した直後は再びfalseに戻ることを確認する。実際の待機（数十ms）を伴う点が他のテストと異なる |
@@ -182,7 +182,7 @@ make scenario
 | Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み。拡張バックログとして、EngineStatusのInvalid Data注入（`MODE=CORRUPT`、送信専用の破損コピーのみ改ざんし実センサ値は変更しない設計）にも対応した。`test/test_can_fault.c`に4件追加（10→14件）、`make run`でEngineStatusのInvalid Data確定・DTC反映まで確認済み） |
 | Phase23 | テストカバレッジ計測（gcov） | 完了（17テストターゲットそれぞれについて、既存のソース構成を再利用した`--coverage`付きビルド（`xxx_cov`）を追加し、担当モジュール1つのgcov実行行数割合を`make coverage`で一括表示できるようにした。プロジェクト全体を1つの数値に合算する`lcov`導入は、共有モジュールが複数ターゲットにまたがる場合に自動では合算されないことを実験で確認した上で、必要性が高まった場合の拡張候補として見送った。`main.c`はUnityとリンクできないため対象外のまま） |
 | Phase24 | フォルダ構成の再編成（BSW/アプリ層分割） | 完了（配置の検討（タスク1）のみ実施。PC依存の処理はファイル単位ではなく各ファイル内の一部の関数に限られており、ファイル単位で層に振り分けると層の意味が崩れるため、`src/`の移動は行わず、ドキュメント類の`docs/`への集約のみ実施した） |
-| Phase25 | Python自動検証（シナリオの結合テスト） | 着手中（`sensor_sim`に外から入力を与え、`docs/scenarios.md`の期待結果と照合する結合テストとして、検証対象のシナリオとテストの枠組み（`unittest`）を決定した。`sensor_sim`本体のコードは変更せず、設定ファイル異常時のフェイルセーフ（`config.txt`が無い場合・壊れている場合）を`make scenario`で自動検証できる。PC上の検証専用モジュール（`fixture.c`・`can_fault.c`）を`sim/`へ移動した） |
+| Phase25 | Python自動検証（シナリオの結合テスト） | 着手中（`sensor_sim`に外から入力を与え、`docs/scenarios.md`の期待結果と照合する結合テストとして、検証対象のシナリオとテストの枠組み（`unittest`）を決定した。`sensor_sim`本体のコードは変更せず、設定ファイル異常時のフェイルセーフ（`config.txt`が無い場合・壊れている場合）を`make scenario`で自動検証できる。PC上の検証専用モジュール（`fixture.c`・`can_fault.c`）を`sim/`へ移動した。`fixture.txt`の`IGNITION=ON/OFF`でイグニッションを固定できるようにした） |
 ---
 
 ## 既知の制約
@@ -194,7 +194,7 @@ make scenario
 - 診断コマンドの受付タイミングはサンプルループ終了後の1回のみで変わっていない。イグニッションOFFへ遷移した瞬間を検出して受け付ける（実際の駐車中スキャンツール接続に近い挙動）わけではなく、ループ終了時点の状態がたまたまOFFかどうかで受付可否が決まる
 - 設定ファイル（config.txt）の値は、validate.cでセンサごとの物理的な値域内か（`LOG_LEVEL`は0〜2の範囲内か）をチェックしており、範囲外ならそのキーを無視する。ただし`STATUS_SPEED_WARN`と`STATUS_SPEED_CRIT`のような、閾値同士の大小関係（WARNがCRITより大きい等の矛盾）はチェックしていない
 - ログレベル（`LOG_LEVEL`）を上げても、`config.c`自身の読み込み結果ログ（設定ファイルの有無・読み込み完了の通知）は常に表示される。表示閾値はそのconfig読み込みの結果として決まるため、config読み込み自体のログをその閾値で制御できない
-- 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。ただし値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない
+- 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。ただし値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない。イグニッションの固定（`IGNITION`）も同じで、実行の途中でON→OFFのように変えることはできない
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
 - 故障確定（Debounce/Degraded/Recovery、`faultmgr.c`）の状態は、DTC記録（`persist.c`）とは異なり電源再投入をまたいで保存されない（プログラム起動のたびに未確定状態から再開する）。診断コマンド（`clear`）でDTCをクリアしても、Degraded状態自体はリセットされない（独立した状態として扱う）
 - 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は単体テストの対象外で、`make run`での実行確認が中心になる。このうち`config.txt`が無い場合・壊れている場合のPOSTの結果だけは、`sensor_sim`を外から実行するシナリオ検証（`make scenario`、Phase25）で自動検証している

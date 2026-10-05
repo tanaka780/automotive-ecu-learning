@@ -18,6 +18,9 @@ typedef struct {
 void ignition_init(Ignition *ignition);
 /* イグニッション状態をランダム値で更新する（ECUの電源状態の変化を模倣） */
 void ignition_update(Ignition *ignition);
+/* 指定された状態でイグニッション状態を更新する（前回の状態はpreviousに残す）。
+   実車のECUがイグニッション信号を入力として受け取る処理に相当する（Phase25） */
+void ignition_set(Ignition *ignition, IgnitionState state);
 /* 前回と今回の状態を比較し、遷移した瞬間だけイベントとして表示する */
 void ignition_check(const Ignition *ignition);
 /* 現在のイグニッション状態を1行でコンソールに出力する */

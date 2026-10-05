@@ -16,6 +16,13 @@ void ignition_update(Ignition *ignition) {
     ignition->current  = ((rand() % 2) == 0) ? IGNITION_OFF : IGNITION_ON;
 }
 
+/* 乱数ではなく、呼び出し側が決めた状態で更新する。fixture.txtのIGNITIONでイグニッションを
+   固定する場合にmain.cから呼ばれる（Phase25）。遷移検出のためpreviousの更新はignition_updateと同じ */
+void ignition_set(Ignition *ignition, IgnitionState state) {
+    ignition->previous = ignition->current;
+    ignition->current  = state;
+}
+
 /* イグニッション状態を表示名に変換する（ignition.c専用の表示ヘルパー） */
 static const char *ignition_state_to_str(IgnitionState state) {
     switch (state) {

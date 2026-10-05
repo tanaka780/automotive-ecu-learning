@@ -4,6 +4,7 @@
 
 #include <stdbool.h>  /* bool を使うために必要 */
 #include "sensor.h"   /* VehicleSensorData を参照するために必要 */
+#include "ignition.h" /* IgnitionState を参照するために必要 */
 
 /* 固定値注入ファイルのデフォルトのファイル名 */
 #define FIXTURE_FILENAME "fixture.txt"
@@ -14,5 +15,11 @@
    ファイルが無い場合・MODE=RANDOMの場合・MODE行が無い場合はdataを変更せずfalseを返す
    （呼び出し側はsensor_updateによるランダム動作を使う） */
 bool fixture_apply(VehicleSensorData *data, const char *filename);
+
+/* 指定したファイルからIGNITION行（IGNITION=ON/OFF）だけを読み込む（Phase25）。
+   有効な行があれば最後に書かれた値をstateに入れてtrueを返す（MODEの値には関係しない）。
+   ファイルが無い場合・IGNITION行が無い場合・値がON/OFF以外の場合はstateを変更せずfalseを返す
+   （呼び出し側はignition_updateによるランダム動作を使う） */
+bool fixture_load_ignition(IgnitionState *state, const char *filename);
 
 #endif /* FIXTURE_H */
