@@ -10,12 +10,10 @@
   - `main.c`は起動時に`fixture_load_ignition`を呼び、trueなら`run_sample_cycle`で`ignition_update`の代わりに`ignition_set`を呼ぶ
   - `test_ignition.c`に2テスト、`test_fixture.c`に5テストを追加した
 - `scenario_test/test_config_failsafe.py`の中にあった`sensor_sim`の実行関数を、`scenario_test/sensor_sim_runner.py`へ切り出した（指定したディレクトリで実行する`run_in_dir`を分け、`run_sensor_sim`はそれを一時ディレクトリで呼ぶ形にした）
-- 切り出し後、リポジトリ直下から`python3 -m unittest scenario_test.test_config_failsafe`のようにモジュール名で実行すると`sensor_sim_runner`が見つからなくなっていたため、`test_config_failsafe.py`の先頭でこのフォルダを`sys.path`に加えるようにした（一度`scenario_test/__init__.py`で対応したが、引数なしの`python3 -m unittest`の挙動まで変わったため削除した）。READMEに、名前を指定して1テストだけ実行する方法（`discover -k`）を書き足した
-- `scenario_test/test_fault_occurrence.py`を新規作成した（故障発生シナリオを、`fixture.txt`で水温だけCRITICAL・車速と水温が同時にCRITICALの2条件にして、イグニッションON固定で実行し、期待結果と照合する）。`docs/scenarios.md`の備考に、自動検証している範囲と対象外の項目を書き足した
-- 故障発生のテストのうち`[METER]`の行を照合する2つに、Phase25の対象外（メーター表示）に当たること、3ECU化で見直しが必要なことを書き足した
+- 切り出し後、リポジトリ直下から`python3 -m unittest scenario_test.test_config_failsafe`のようにモジュール名で実行すると`sensor_sim_runner`が見つからなくなっていたため、`test_config_failsafe.py`の先頭でこのフォルダを`sys.path`に加えるようにした（一度`scenario_test/__init__.py`で対応したが、引数なしの`python3 -m unittest`の挙動まで変わったため削除した）
+- `scenario_test/test_fault_occurrence.py`を新規作成した（故障発生シナリオを、`fixture.txt`で水温だけCRITICAL・車速と水温が同時にCRITICALの2条件にして、イグニッションON固定で実行し、期待結果と照合する）
+- `test_fault_occurrence.py`の説明（docstring）に、`[METER]`の行を照合する2つのテストがPhase25の対象外（メーター表示）に当たること、3ECU化で見直しが必要なことを書き足した
 - `scenario_test/test_power_cycle.py`を新規作成した（同じ一時ディレクトリで`sensor_sim`を3回続けて起動し、電源再投入シナリオの期待結果と照合する）
-- `docs/scenarios.md`の電源再投入の期待結果に、「再起動後もCRITICALなら発生回数がもう1つ増える」「フリーズフレームは引き継がれ、上書きされない」の2行を追加した。あわせて、流れの後に「1回目と2回目の起動の間に`clear`は行わない」という前提を書いた
-- Phase25の全タスクが完了したので、README・`project_context.md`・`study_plan.md`をPhase25完了の状態に更新した。Makefileがヘッダファイルの変更を検知しないことを、READMEの既知の制約と`project_context.md`に書いた
 
 ## 確認内容
 
@@ -120,7 +118,7 @@
 - 3回続けて実行して、「再起動後もCRITICALなら発生回数が2になる」「フリーズフレームは上書きされない」という、シナリオに書かれていない動きが見つかった。実装に合わせて仕様を書き足すと、実装の誤りを仕様として固めてしまうおそれがあるので、先に妥当かを確かめた。発生回数は、実車でもイグニッションON〜OFFの1サイクルごとに数えるのが一般的。フリーズフレームは、故障発生の期待結果「最初にCRITICALが発生した瞬間の値」と合う。どちらも妥当と判断してから、scenarios.mdに追加した
 - 期待結果の「メーターECUの通信異常の記録は永続化していない」は、1回目に`can_fault.txt`を置けば確かめられる。ただ、これはPhase25で対象外とした通信故障に当たるうえ、機能ではなく「まだ永続化していない」という制約なので、テストにすると将来直す予定のものを固めてしまう。検証しないことをテストの説明に書いた
 - 3回の実行を別々のクラスに分ける案（巻き込みが無い代わりに4回実行・約80秒）とも比べた。電源再投入は「前の起動の結果を次の起動が引き継ぐ」こと自体を見るシナリオなので、1つのクラスで続けて実行した
-- 再確認で、追加した「フリーズフレームは上書きされない」が、診断コマンドの「`clear`でフリーズフレームが初期状態に戻る」と並べると矛盾して見えることに気付いた。`clear`を挟まない前提は、引き継ぎ・発生回数の行も同じなので、行ごとに条件を足すのではなく、電源再投入の流れの後に「起動の間に`clear`は行わない」と1文書いた
+- 再確認で、追加した「フリーズフレームは上書きされない」が、診断コマンドの「`clear`でフリーズフレームが初期状態に戻る」と並べると矛盾して見えることに気付いた。`clear`を挟まない前提は、引き継ぎ・発生回数の行も同じなので、行ごとに条件を足すのではなく、電源再投入の流れの3番目（2回目の起動）に「1回目との間に`clear`は行わない」と書いた
 - タスク7は、Stepごとに確かめた結果を集めるのではなく、最終状態で3シナリオを同じ形（期待値を1つ間違える・Cを1つ変える）でやり直した。途中の状態で確かめた結果は、その後の変更で崩れていても気付けないため
 - タスク7の途中で、`faultmgr.h`だけを変えても`sensor_sim`が作り直されないことに気付いた。Makefileは`$(TARGET): $(SRCS)`のように`.c`だけを依存関係にしているので、`.h`の変更は検知されない。CLAUDE.mdの手順（`make clean && make`）なら問題にならないが、`make scenario`だけを実行すると古い実行ファイルを検証してしまう。Phase25の範囲外なので、今回は直さずREADMEの既知の制約に書いた
 
