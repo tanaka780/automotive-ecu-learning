@@ -3,17 +3,9 @@
 sensor_simは改修せず、外からファイルを置いて実行し、標準出力と終了コードを期待結果と照合する。
 `make scenario`で実行する。1条件につきsensor_simを最後まで1回動かすため、約20秒×条件数かかる。
 """
-import os
-import subprocess
-import tempfile
 import unittest
 
-# このファイルの1つ上がリポジトリ直下。sensor_simは絶対パスで指定し、作業ディレクトリだけを差し替える
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SENSOR_SIM = os.path.join(REPO_ROOT, "sensor_sim")
-
-# 通常は約20秒で終わる。止まった場合にテストごと固まらないための上限
-TIMEOUT_SEC = 60
+from sensor_sim_runner import run_sensor_sim
 
 # config_initのデフォルト値（alert.h/status.h）のまま動いているときの、config_printの出力
 DEFAULT_CONFIG_LINE = (
@@ -27,27 +19,6 @@ VALID_DTC_DATA = "0\n" * 11
 
 # 全行が反映されないconfig.txt（数値でない値・"="の無い行・値域外の値）
 BROKEN_CONFIG = "ALERT_SPEED_MAX=abc\nGARBAGE\nSTATUS_TEMP_CRIT=999\n"
-
-
-def run_sensor_sim(files):
-    """filesの{ファイル名: 内容}だけを置いた一時ディレクトリでsensor_simを実行し、結果を返す。
-
-    config.txt・dtc_data.txt等はすべて相対パスで読み書きされるため、作業ディレクトリを
-    一時ディレクトリにすれば本番のdtc_data.txtを上書きしない。
-    """
-    with tempfile.TemporaryDirectory() as workdir:
-        for name, text in files.items():
-            with open(os.path.join(workdir, name), "w") as f:
-                f.write(text)
-        # イグニッションOFFで終わるとcmd_read_lineが入力待ちになるため、標準入力にはEOFを渡す
-        return subprocess.run(
-            [SENSOR_SIM],
-            cwd=workdir,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT_SEC,
-        )
 
 
 class NoConfigFirstBootTest(unittest.TestCase):

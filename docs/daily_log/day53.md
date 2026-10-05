@@ -9,6 +9,7 @@
   - `sim/fixture.c`に`fixture_load_ignition`を追加した（同じファイルからIGNITION行だけを読む。既存の`fixture_apply`は変更なし）
   - `main.c`は起動時に`fixture_load_ignition`を呼び、trueなら`run_sample_cycle`で`ignition_update`の代わりに`ignition_set`を呼ぶ
   - `test_ignition.c`に2テスト、`test_fixture.c`に5テストを追加した
+- `scenario_test/test_config_failsafe.py`の中にあった`sensor_sim`の実行関数を、`scenario_test/sensor_sim_runner.py`へ切り出した（指定したディレクトリで実行する`run_in_dir`を分け、`run_sensor_sim`はそれを一時ディレクトリで呼ぶ形にした）
 
 ## 確認内容
 
@@ -41,6 +42,9 @@
 | `IGNITION=OFF`で実行 | `[IGN] OFF`が20回、遷移なし、最後は`Enter command`（標準入力はEOFなのでそのまま終了） |
 | `IGNITION`の行なしで実行 | `[FIXTURE] Ignition fixed`は出ず、ON 9回・OFF 11回・遷移13回（今まで通りランダム） |
 | コピーしたリポジトリで実装をわざと間違えてテスト | `ignition_set`が`previous`を更新しない→`test_ignition`で2件FAIL、小文字の`on`も受け付ける→1件FAIL、後勝ちではなく先勝ち→1件FAIL |
+| 実行関数の切り出し後、`unittest`が見つけるテスト名の一覧 | 切り出し前（HEAD）と同じ11件。`sensor_sim_runner.py`はテストとして拾われていない |
+| 同、`make scenario` | 11テスト全てOK |
+| 同、コピーしたリポジトリで期待値の閾値を`speed=101`に書き換えて実行 | 2件FAIL（`DEFAULT_CONFIG_LINE`を使う2テスト）。実行関数を切り出しても、間違った期待値は検出される |
 
 - `make scenario`の前後で、リポジトリ直下の`dtc_data.txt`の更新日時は変わらなかった
 - 最初の`fixture.txt`・`can_fault.txt`の確認は、一時ディレクトリで実行したつもりがホームディレクトリで実行されていた（`wsl.exe`に渡したコマンドの`$変数`がWSL側に届く前に空に展開されていた）。WSL側でスクリプトとして実行する形に直し、cloneしたリポジトリと本物の一時ディレクトリでやり直した
@@ -63,6 +67,7 @@
 - `ignition_set`は検証のための関数ではなく、実車のECUがイグニッション信号を入力として受け取る処理に近い。乱数で決める`ignition_update`の方がPC上のシミュレーション側の処理なので、target対応時に`ignition_update`を`sim/`へ移しても`ignition_set`はそのまま使える。今は`ignition_update`に手を入れていないので、`previous`を更新する2行が重複している
 - `IGNITION`は`MODE`に関係なく、行があれば有効にした。`MODE=FIXED`の時だけにすると、新しい関数も`MODE`を読む必要があり、`fixture_apply`との重複が増える
 - 今回のシナリオでは、イグニッションを固定すると、ループ終了時がONなので標準入力を待つ処理に入らない。Day51で挙げた「止まる」問題は、ONに固定する限り起きない
+- 実行関数は最初「故障発生ではコピーし、電源再投入（3つ目）で共通化する」としていた。この判断が間違いだと仮定して比べ直すと、先送りしても、電源再投入の時に共通化（既存ファイルの変更）とテスト追加が同じタイミングに重なるだけだった。3つ目の使い方（同じディレクトリで2回実行する）も今日の計画で分かっているので、先に切り出しだけを行い、既存の11テストが同じ名前でOKのままなのを確かめてから故障発生のテストを足す順にした
 
 ## 次回やること
 
