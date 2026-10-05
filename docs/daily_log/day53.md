@@ -10,6 +10,7 @@
   - `main.c`は起動時に`fixture_load_ignition`を呼び、trueなら`run_sample_cycle`で`ignition_update`の代わりに`ignition_set`を呼ぶ
   - `test_ignition.c`に2テスト、`test_fixture.c`に5テストを追加した
 - `scenario_test/test_config_failsafe.py`の中にあった`sensor_sim`の実行関数を、`scenario_test/sensor_sim_runner.py`へ切り出した（指定したディレクトリで実行する`run_in_dir`を分け、`run_sensor_sim`はそれを一時ディレクトリで呼ぶ形にした）
+- `scenario_test/__init__.py`を追加し、このフォルダを`sys.path`に加えるようにした（切り出し後、リポジトリ直下から`python3 -m unittest scenario_test.test_config_failsafe`のようにモジュール名で実行すると`sensor_sim_runner`が見つからなくなっていたため）。READMEに、名前を指定して1テストだけ実行する方法（`discover -k`）を書き足した
 
 ## 確認内容
 
@@ -45,6 +46,8 @@
 | 実行関数の切り出し後、`unittest`が見つけるテスト名の一覧 | 切り出し前（HEAD）と同じ11件。`sensor_sim_runner.py`はテストとして拾われていない |
 | 同、`make scenario` | 11テスト全てOK |
 | 同、コピーしたリポジトリで期待値の閾値を`speed=101`に書き換えて実行 | 2件FAIL（`DEFAULT_CONFIG_LINE`を使う2テスト）。実行関数を切り出しても、間違った期待値は検出される |
+| 切り出しのコミット後にcloneして、`make scenario`以外の実行方法も確認 | ファイルを直接実行（`python3 scenario_test/test_config_failsafe.py`）はOK。リポジトリ直下からモジュール名で実行すると`ModuleNotFoundError: No module named 'sensor_sim_runner'`（切り出し前は動いていた） |
+| `__init__.py`追加後 | 下の「再確認」の行を参照 |
 
 - `make scenario`の前後で、リポジトリ直下の`dtc_data.txt`の更新日時は変わらなかった
 - 最初の`fixture.txt`・`can_fault.txt`の確認は、一時ディレクトリで実行したつもりがホームディレクトリで実行されていた（`wsl.exe`に渡したコマンドの`$変数`がWSL側に届く前に空に展開されていた）。WSL側でスクリプトとして実行する形に直し、cloneしたリポジトリと本物の一時ディレクトリでやり直した
@@ -68,6 +71,7 @@
 - `IGNITION`は`MODE`に関係なく、行があれば有効にした。`MODE=FIXED`の時だけにすると、新しい関数も`MODE`を読む必要があり、`fixture_apply`との重複が増える
 - 今回のシナリオでは、イグニッションを固定すると、ループ終了時がONなので標準入力を待つ処理に入らない。Day51で挙げた「止まる」問題は、ONに固定する限り起きない
 - 実行関数は最初「故障発生ではコピーし、電源再投入（3つ目）で共通化する」としていた。この判断が間違いだと仮定して比べ直すと、先送りしても、電源再投入の時に共通化（既存ファイルの変更）とテスト追加が同じタイミングに重なるだけだった。3つ目の使い方（同じディレクトリで2回実行する）も今日の計画で分かっているので、先に切り出しだけを行い、既存の11テストが同じ名前でOKのままなのを確かめてから故障発生のテストを足す順にした
+- 切り出しで動かなくなったモジュール名での実行は、各テストファイルの先頭で`sys.path`に足す案・パッケージにして`discover -t .`に変える案・直さずに`discover -k`の使い方だけ書く案と比べた。各ファイルに書く案は、新しいテストファイルで書き忘れても`make scenario`では気付けない。パッケージにする案は、試すと直接実行が逆に動かなくなった。`__init__.py`の1か所で足せば、切り出し前に動いていた実行方法がすべて元に戻り、新しいテストファイルでは何も書かなくてよい
 
 ## 次回やること
 
