@@ -24,7 +24,10 @@
 | `-Isim`なしで`src/main.c`をコンパイル | `fixture.h: No such file or directory`で失敗 |
 | 一時ディレクトリに`fixture.txt`（`MODE=FIXED`、SPEED=50）と`can_fault.txt`（`MODE=DROP`、ENGINE_STATUS）を置いて実行 | `[FIXTURE] Loaded fixture file (FIXED mode)`、センサ値は毎回`Speed: 50`、`[CAN] EngineStatus link lost`が出た |
 
+| コミット後のリポジトリを一時ディレクトリにcloneし、上記を全てやり直し | 警告0件、17ターゲット・108テスト全てPASS、カバレッジ・cppcheckの件数は上と同じ、`make scenario` OK。`fixture.txt`・`can_fault.txt`の確認も一時ディレクトリで同じ結果 |
+
 - `make scenario`の前後で、リポジトリ直下の`dtc_data.txt`の更新日時は変わらなかった
+- 最初の`fixture.txt`・`can_fault.txt`の確認は、一時ディレクトリで実行したつもりがホームディレクトリで実行されていた（`wsl.exe`に渡したコマンドの`$変数`がWSL側に届く前に空に展開されていた）。WSL側でスクリプトとして実行する形に直し、cloneしたリポジトリと本物の一時ディレクトリでやり直した
 
 ## 判定
 
