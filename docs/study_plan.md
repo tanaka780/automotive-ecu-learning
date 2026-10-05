@@ -645,7 +645,7 @@ Phase1〜9では、自動車関連プログラムに使われる個々の機能�
 
 ## 保留中の候補
 
-Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase25は完了済み（または着手中）のため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」「Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）」「Phase21：CAN異常処理（Timeout/Invalid DataのDTC反映）」「Phase22：CAN Fault Injection（通信故障の意図的な発生）」「Phase23：テストカバレッジ計測（gcov）」「Phase24：フォルダ構成の再編成（BSW/アプリ層分割）」「Phase25：Python自動検証（シナリオの結合テスト）」）を参照し、下記には含めない。
+Phase9着手後に何を実装するかの候補一覧。Phase10〜Phase25は完了済みのため、それぞれの節（「Phase10：車両シナリオの定義」「Phase11：固定値注入によるシナリオ再現の仕組み構築」「Phase12：入力妥当性チェック（Guard Clause）」「Phase13：Unity試用」「Phase14：MISRA対応」「Phase15：故障確定とFail-safe（Debounce→Degraded mode→復帰）」「Phase16：起動時自己診断（POST）」「Phase17：DTO整理」「Phase18：Timer（周期処理の時間管理基盤）」「Phase19：Scheduler（周期処理のタスク管理基盤）」「Phase20：CAN通信（エンジン監視ECU→メーターECU間のメッセージ送受信）」「Phase21：CAN異常処理（Timeout/Invalid DataのDTC反映）」「Phase22：CAN Fault Injection（通信故障の意図的な発生）」「Phase23：テストカバレッジ計測（gcov）」「Phase24：フォルダ構成の再編成（BSW/アプリ層分割）」「Phase25：Python自動検証（シナリオの結合テスト）」）を参照し、下記には含めない。
 
 ### 今後の候補テーマ（優先順位・Phase番号は未定）
 
