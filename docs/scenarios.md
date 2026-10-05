@@ -183,4 +183,6 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 
 正常走行／故障発生／診断コマンド／電源再投入は、study_plan.mdのPhase11（固定値注入によるシナリオ再現の仕組み構築）で、config.txtと同様のKEY=VALUE形式によりセンサ固定値（speed/rpm/temperature）を注入できるようにしてから、上記の期待結果を実際に確認する。診断コマンドのシナリオでは、注入したセンサ値でDTCを発生させた後、`cmd_dispatch`に直接コマンド文字列を渡すことで（test/test_cmd.cと同じやり方で）再現する。
 
+故障発生の期待結果は、`make scenario`（Phase25）で自動検証している。fixture.txtは1回の実行中ずっと同じ値しか注入できないため、1サンプル目から最後までCRITICALが続く形（イグニッションは`IGNITION=ON`で固定）で、Degraded確定までを確認する。流れのうち正常範囲での更新・正常範囲に戻る・Ignition OFFと、期待結果のうちRecoveredは自動検証の対象外。
+
 設定ファイル異常時のフェイルセーフは、センサ値の注入ではなくconfig.txtファイル自体の有無・内容を変えることで再現する（test/test_config.cの`write_raw`と同じやり方）。Phase11の対象には含めない。このシナリオの期待結果は、`make scenario`（Phase25）で自動検証している。

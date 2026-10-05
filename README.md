@@ -71,7 +71,7 @@ make test
 make coverage
 ```
 
-シナリオ検証（Phase25。`sensor_sim`をPythonから実行し、[docs/scenarios.md](docs/scenarios.md)の期待結果と照合する。現在は設定ファイル異常時のフェイルセーフのみ。1条件につき約20秒、3条件で約1分かかる）:
+シナリオ検証（Phase25。`sensor_sim`をPythonから実行し、[docs/scenarios.md](docs/scenarios.md)の期待結果と照合する。現在は設定ファイル異常時のフェイルセーフと故障発生（Degraded確定まで）。1条件につき約20秒、5条件で約1分40秒かかる）:
 
 ```bash
 make scenario
@@ -156,6 +156,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | `test/test_can_diag.c` | can_diag.c の動作確認（`make test`で実行）。`CanLinkState`のLost確定・Recovery復帰によるDTC相当の記録の更新、メッセージ（EngineStatus/FaultStatus）間の独立性を確認する |
 | `test/test_can_fault.c` | can_fault.c の動作確認（`make test`で実行）。Drop判定（`can_fault_is_dropped`）・Corrupt判定（`can_fault_is_corrupted`）の対象メッセージ一致・時間範囲の境界と、`can_fault.txt`のファイルパース（`can_fault_load`の正常系・異常系、`MODE=CORRUPT`+`TARGET=FAULT_STATUS`が無効な組み合わせとして注入なし扱いになることを含む）を確認する |
 | `scenario_test/test_config_failsafe.py` | `sensor_sim`を一時ディレクトリで最後まで実行し、標準出力・終了コードを設定ファイル異常時のフェイルセーフシナリオの期待結果と照合する結合テスト（`make scenario`で実行、Python標準の`unittest`）。`config.txt`が無い場合の2条件（`dtc_data.txt`も無い／`dtc_data.txt`は読み込める）と、`config.txt`が壊れている場合の1条件を確認する |
+| `scenario_test/test_fault_occurrence.py` | `fixture.txt`でセンサ値とイグニッション（ON）を固定して`sensor_sim`を実行し、故障発生シナリオの期待結果と照合する結合テスト（`make scenario`で実行）。水温だけがCRITICALの条件で、警告・DTC・フリーズフレーム・3サンプル目でのDegraded確定・確定後のフェイルセーフ値（警告・統計・メーター表示）を、車速と水温が同時にCRITICALの条件で、両方のDTC記録・フリーズフレームの原因（Speed）・Degradedのセンサだけの差し替えを確認する。固定値は実行中変えられないため、正常値に戻ってのRecoveredは対象外 |
 | `scenario_test/sensor_sim_runner.py` | シナリオ検証で共通に使う`sensor_sim`の実行関数。一時ディレクトリで1回実行する`run_sensor_sim`と、指定したディレクトリで実行する`run_in_dir`（同じディレクトリで2回実行し、保存されたファイルを引き継ぐ場合に使う）を提供する。ファイル名が`test_`で始まらないため、テストとしては実行されない。各テストファイルが先頭でこのフォルダを`import`の検索先に加えるため、モジュール名を指定した実行（`python3 -m unittest scenario_test.test_xxx`）でも見つかる |
 | `test/test_common.c` | test_diag.c・test_persist.c・test_cmd.c・test_alert.c・test_config.cで共通のテスト補助関数（サンプル投入用の`test_feed`/`test_run_sample`、デフォルトの`ConfigData`を返す`test_default_config`）を提供する。Phase13でテスト自体をUnity形式に統一したため、結果判定・サマリ表示（旧`test_check`/`test_summary`）の役割はUnityに置き換わった |
 
@@ -189,7 +190,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | Phase22 | CAN Fault Injection（通信故障の意図的な発生） | 完了（新規`can_fault.h`/`can_fault.c`を作成。`can.c`本体は変更せず送信関数（`can_send_engine_status`/`can_send_fault_status`）をラップし、`can_fault.txt`で指定したメッセージ・期間（プログラム起動からの経過時間）だけ意図的に送信をスキップしてTimeoutを再現する。実装時、`timer_get_elapsed_ms`がシステム起動からの経過時間を返す（プログラム起動からではない）ため期間指定が機能しないバグが`make run`で発覚し、基準時刻（`base_ms`）を持たせて差分を取る形に修正した。`test/test_can_fault.c`による自動テスト、`make run`でCANリンクのLost/Recoveryの実行時再現まで確認済み。拡張バックログとして、EngineStatusのInvalid Data注入（`MODE=CORRUPT`、送信専用の破損コピーのみ改ざんし実センサ値は変更しない設計）にも対応した。`test/test_can_fault.c`に4件追加（10→14件）、`make run`でEngineStatusのInvalid Data確定・DTC反映まで確認済み） |
 | Phase23 | テストカバレッジ計測（gcov） | 完了（17テストターゲットそれぞれについて、既存のソース構成を再利用した`--coverage`付きビルド（`xxx_cov`）を追加し、担当モジュール1つのgcov実行行数割合を`make coverage`で一括表示できるようにした。プロジェクト全体を1つの数値に合算する`lcov`導入は、共有モジュールが複数ターゲットにまたがる場合に自動では合算されないことを実験で確認した上で、必要性が高まった場合の拡張候補として見送った。`main.c`はUnityとリンクできないため対象外のまま） |
 | Phase24 | フォルダ構成の再編成（BSW/アプリ層分割） | 完了（配置の検討（タスク1）のみ実施。PC依存の処理はファイル単位ではなく各ファイル内の一部の関数に限られており、ファイル単位で層に振り分けると層の意味が崩れるため、`src/`の移動は行わず、ドキュメント類の`docs/`への集約のみ実施した） |
-| Phase25 | Python自動検証（シナリオの結合テスト） | 着手中（`sensor_sim`に外から入力を与え、`docs/scenarios.md`の期待結果と照合する結合テストとして、検証対象のシナリオとテストの枠組み（`unittest`）を決定した。設定ファイル異常時のフェイルセーフ（`config.txt`が無い場合・壊れている場合）は、`sensor_sim`本体を変更せずに`make scenario`で自動検証できる。PC上の検証専用モジュール（`fixture.c`・`can_fault.c`）を`sim/`へ移動した。`fixture.txt`の`IGNITION=ON/OFF`でイグニッションを固定できるようにした） |
+| Phase25 | Python自動検証（シナリオの結合テスト） | 着手中（`sensor_sim`に外から入力を与え、`docs/scenarios.md`の期待結果と照合する結合テストとして、検証対象のシナリオとテストの枠組み（`unittest`）を決定した。設定ファイル異常時のフェイルセーフ（`config.txt`が無い場合・壊れている場合）は、`sensor_sim`本体を変更せずに`make scenario`で自動検証できる。PC上の検証専用モジュール（`fixture.c`・`can_fault.c`）を`sim/`へ移動した。`fixture.txt`の`IGNITION=ON/OFF`でイグニッションを固定できるようにし、故障発生（Degraded確定まで）も自動検証できる） |
 ---
 
 ## 既知の制約
@@ -204,7 +205,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 - 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。ただし値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない。イグニッションの固定（`IGNITION`）も同じで、実行の途中でON→OFFのように変えることはできない
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
 - 故障確定（Debounce/Degraded/Recovery、`faultmgr.c`）の状態は、DTC記録（`persist.c`）とは異なり電源再投入をまたいで保存されない（プログラム起動のたびに未確定状態から再開する）。診断コマンド（`clear`）でDTCをクリアしても、Degraded状態自体はリセットされない（独立した状態として扱う）
-- 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は単体テストの対象外で、`make run`での実行確認が中心になる。このうち`config.txt`が無い場合・壊れている場合のPOSTの結果だけは、`sensor_sim`を外から実行するシナリオ検証（`make scenario`、Phase25）で自動検証している
+- 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は単体テストの対象外で、`make run`での実行確認が中心になる。このうち`config.txt`が無い場合・壊れている場合のPOSTの結果と、故障発生時（Degraded確定まで）の処理の流れは、`sensor_sim`を外から実行するシナリオ検証（`make scenario`、Phase25）で自動検証している
 - DTC発生回数（`DtcEntry.count`、`uint8_t`）は上限（255）を超えると飽和させず0に巻き戻る。dtc_data.txtで永続化され複数回の起動をまたいで積み上がる値のため理論上は起こりうるが、通算256回以上の発生が必要であり現実的な発生頻度は低い
 - `config.txt`/`fixture.txt`の数値パース（`sscanf`の`%d`）は、値がint型の範囲を超える場合の動作を保証していない（値域チェック`validate_in_range`が働く前の段階のため）。ローカルで自分が編集する前提のファイルであり、外部・未信頼な入力を想定した対策はしていない
 - CAN通信（`can.c`）は実プロセス分離・実IPC（SocketCAN等）を使わず、単一プロセス内の共有メモリ（`CanBus`）でエンジンECU役・メーターECU役を表現している。実チップ間の物理的な通信遅延やバス調停の実態は再現していない（IDは実車の優先度慣例に合わせて値を割り当てているが、実際のアービトレーションには使っていない）
