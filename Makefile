@@ -5,7 +5,9 @@ CC = gcc
 # -Wall -Wextra: 警告を多く出す (バグの早期発見に役立つ)
 # -std=c11: C11 規格でコンパイルする
 # -Iinclude: include/ フォルダを #include の検索パスに追加する
-CFLAGS = -Wall -Wextra -std=c11 -Iinclude
+# -Isim: sim/ フォルダ（PC上の検証専用モジュール、Phase25）を #include の検索パスに追加する。
+#        main.cがfixture.h/can_fault.hを読むため、ECU本体側にも必要になっている
+CFLAGS = -Wall -Wextra -std=c11 -Iinclude -Isim
 
 # Unity本体はvendor/unity/に配置（公式ThrowTheSwitch/Unityリポジトリより取得、MITライセンス、Phase13）
 # テストターゲットのみ、Unityのヘッダを検索できるよう-Ivendor/unityを追加したTEST_CFLAGSを使う
@@ -18,7 +20,11 @@ TEST_CFLAGS_COV = $(TEST_CFLAGS) --coverage
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/fixture.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c src/can_fault.c
+# ECU_SRCS: ECU本体（src/）、SIM_SRCS: PC上の検証専用（sim/、固定値注入・CAN Fault Injection、Phase25）。
+# sensor_simは両方を合わせてビルドする。main.cがsim/の関数を直接呼んでいるため、現状はsim/を外すとビルドできない
+ECU_SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c
+SIM_SRCS = sim/fixture.c sim/can_fault.c
+SRCS = $(ECU_SRCS) $(SIM_SRCS)
 
 # 生成する実行ファイルの名前
 TARGET = sensor_sim
@@ -60,7 +66,7 @@ TEST_CONFIG_TARGET = test_config
 
 # fixture.c の動作確認用テスト（fixture_applyのファイルパースの正常系・異常系の確認、main.c は使わない）
 # fixture.cはtest_common.cのtest_feed/test_default_configを使わないため、fixture.c+sensor.c(sensor_init用)+validate.c+logger.cのみで足りる
-TEST_FIXTURE_SRCS = test/test_fixture.c src/sensor.c src/fixture.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_FIXTURE_SRCS = test/test_fixture.c src/sensor.c sim/fixture.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_FIXTURE_TARGET = test_fixture
 
 # validate.c の動作確認用テスト（値域チェック関数自体の境界値確認、main.c は使わない）
@@ -108,7 +114,7 @@ TEST_CAN_DIAG_TARGET = test_can_diag
 # can_fault.c の動作確認用テスト（Drop判定・can_fault.txtのファイルパース確認、main.c は使わない）
 # can_fault.cはcan.c（ラップ対象の送信関数）・faultmgr.c（警告灯データの送信元）・debounce.c/validate.c
 # （can.cが依存）・timer.c（can.cのtimestamp取得）に依存する（Phase22）
-TEST_CAN_FAULT_SRCS = test/test_can_fault.c src/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_FAULT_TARGET = test_can_fault
 
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
