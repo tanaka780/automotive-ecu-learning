@@ -44,6 +44,7 @@
 
 - `make scenario`の前後で、リポジトリ直下の`dtc_data.txt`の更新日時は変わらなかった
 - 最初の`fixture.txt`・`can_fault.txt`の確認は、一時ディレクトリで実行したつもりがホームディレクトリで実行されていた（`wsl.exe`に渡したコマンドの`$変数`がWSL側に届く前に空に展開されていた）。WSL側でスクリプトとして実行する形に直し、cloneしたリポジトリと本物の一時ディレクトリでやり直した
+- イグニッション固定のコミット後もcloneして全てやり直し、同じ結果になった。追加で、改行がCRLFの`fixture.txt`（Windowsで編集した場合）・`MODE=RANDOM`+`IGNITION=ON`・`IGNITION=on`（不正な値）でも想定通りに動くことを確認した。README・project_contextに「`sensor_sim`本体は未変更」という記述が残っていたので、設定ファイル異常のシナリオについての記述だと分かる形に直した
 
 ## 判定
 
