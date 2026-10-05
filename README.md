@@ -156,7 +156,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | `test/test_can_diag.c` | can_diag.c の動作確認（`make test`で実行）。`CanLinkState`のLost確定・Recovery復帰によるDTC相当の記録の更新、メッセージ（EngineStatus/FaultStatus）間の独立性を確認する |
 | `test/test_can_fault.c` | can_fault.c の動作確認（`make test`で実行）。Drop判定（`can_fault_is_dropped`）・Corrupt判定（`can_fault_is_corrupted`）の対象メッセージ一致・時間範囲の境界と、`can_fault.txt`のファイルパース（`can_fault_load`の正常系・異常系、`MODE=CORRUPT`+`TARGET=FAULT_STATUS`が無効な組み合わせとして注入なし扱いになることを含む）を確認する |
 | `scenario_test/test_config_failsafe.py` | `sensor_sim`を一時ディレクトリで最後まで実行し、標準出力・終了コードを設定ファイル異常時のフェイルセーフシナリオの期待結果と照合する結合テスト（`make scenario`で実行、Python標準の`unittest`）。`config.txt`が無い場合の2条件（`dtc_data.txt`も無い／`dtc_data.txt`は読み込める）と、`config.txt`が壊れている場合の1条件を確認する |
-| `scenario_test/sensor_sim_runner.py` | シナリオ検証で共通に使う`sensor_sim`の実行関数。一時ディレクトリで1回実行する`run_sensor_sim`と、指定したディレクトリで実行する`run_in_dir`（同じディレクトリで2回実行し、保存されたファイルを引き継ぐ場合に使う）を提供する。ファイル名が`test_`で始まらないため、テストとしては実行されない。`scenario_test/__init__.py`がこのフォルダを`import`の検索先に加えるため、モジュール名を指定した実行（`python3 -m unittest scenario_test.test_xxx`）でも見つかる |
+| `scenario_test/sensor_sim_runner.py` | シナリオ検証で共通に使う`sensor_sim`の実行関数。一時ディレクトリで1回実行する`run_sensor_sim`と、指定したディレクトリで実行する`run_in_dir`（同じディレクトリで2回実行し、保存されたファイルを引き継ぐ場合に使う）を提供する。ファイル名が`test_`で始まらないため、テストとしては実行されない。各テストファイルが先頭でこのフォルダを`import`の検索先に加えるため、モジュール名を指定した実行（`python3 -m unittest scenario_test.test_xxx`）でも見つかる |
 | `test/test_common.c` | test_diag.c・test_persist.c・test_cmd.c・test_alert.c・test_config.cで共通のテスト補助関数（サンプル投入用の`test_feed`/`test_run_sample`、デフォルトの`ConfigData`を返す`test_default_config`）を提供する。Phase13でテスト自体をUnity形式に統一したため、結果判定・サマリ表示（旧`test_check`/`test_summary`）の役割はUnityに置き換わった |
 
 ---

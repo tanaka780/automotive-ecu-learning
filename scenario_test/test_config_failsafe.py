@@ -3,9 +3,14 @@
 sensor_simは改修せず、外からファイルを置いて実行し、標準出力と終了コードを期待結果と照合する。
 `make scenario`で実行する。1条件につきsensor_simを最後まで1回動かすため、約20秒×条件数かかる。
 """
+import os
+import sys
 import unittest
 
-from sensor_sim_runner import run_sensor_sim
+# リポジトリ直下からモジュール名で実行した場合（python3 -m unittest scenario_test.test_xxx）も
+# sensor_sim_runnerが見つかるよう、このフォルダをimportの検索先に加える
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sensor_sim_runner import run_sensor_sim  # noqa: E402
 
 # config_initのデフォルト値（alert.h/status.h）のまま動いているときの、config_printの出力
 DEFAULT_CONFIG_LINE = (
