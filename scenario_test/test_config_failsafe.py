@@ -10,7 +10,7 @@ import unittest
 # リポジトリ直下からモジュール名で実行した場合（python3 -m unittest scenario_test.test_xxx）も
 # sensor_sim_runnerが見つかるよう、このフォルダをimportの検索先に加える
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sensor_sim_runner import run_sensor_sim  # noqa: E402
+from sensor_sim_runner import run_sensor_sim
 
 # config_initのデフォルト値（alert.h/status.h）のまま動いているときの、config_printの出力
 DEFAULT_CONFIG_LINE = (
