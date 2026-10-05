@@ -47,7 +47,7 @@
 | 同、`make scenario` | 11テスト全てOK |
 | 同、コピーしたリポジトリで期待値の閾値を`speed=101`に書き換えて実行 | 2件FAIL（`DEFAULT_CONFIG_LINE`を使う2テスト）。実行関数を切り出しても、間違った期待値は検出される |
 | 切り出しのコミット後にcloneして、`make scenario`以外の実行方法も確認 | ファイルを直接実行（`python3 scenario_test/test_config_failsafe.py`）はOK。リポジトリ直下からモジュール名で実行すると`ModuleNotFoundError: No module named 'sensor_sim_runner'`（切り出し前は動いていた） |
-| `__init__.py`追加後 | 下の「再確認」の行を参照 |
+| `__init__.py`追加のコミット後にcloneして確認 | モジュール名での実行・ファイルの直接実行・`discover -k test_runs_to_the_end`（2テスト）がすべてOK。`make scenario`は11テストOK、テスト数は11件のままで`__init__.py`・`sensor_sim_runner.py`はテストとして拾われていない |
 
 - `make scenario`の前後で、リポジトリ直下の`dtc_data.txt`の更新日時は変わらなかった
 - 最初の`fixture.txt`・`can_fault.txt`の確認は、一時ディレクトリで実行したつもりがホームディレクトリで実行されていた（`wsl.exe`に渡したコマンドの`$変数`がWSL側に届く前に空に展開されていた）。WSL側でスクリプトとして実行する形に直し、cloneしたリポジトリと本物の一時ディレクトリでやり直した
