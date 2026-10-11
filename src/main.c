@@ -48,16 +48,24 @@ typedef struct {
     const CanFaultConfig *can_fault;   /* CAN Fault Injection設定（Phase22）。送信をラップする際に使う */
 } SampleCycleContext;
 
-/* Schedulerに登録するCAN送受信タスクが参照するポインタ一式。エンジンECU役(送信)・メーターECU役(受信)
-   のどちらも、対象のバス・イグニッション状態だけを見ればよいため同じ形のcontextを共有する（Phase20） */
+/* エンジンECU役の警告灯データ送信タスク(run_can_send_fault_status)が参照するポインタ一式（Phase20）。
+   もとはメーターECU役の受信タスクと同じ形のcontextを共有していたが、送信側からメーターECU役の
+   受信監視状態が見えないよう、送信用・受信用に分けた（Phase26） */
 typedef struct {
     const Ignition *ignition;
     CanBus         *can_bus;
-    const FaultManager *fault_mgr;   /* 送信タスク(run_can_send_fault_status)のみ使用 */
-    CanMonitor     *can_monitor;     /* 受信タスクのみ使用 */
-    CanDtcRecord   *can_dtc;         /* 受信タスクのみ使用（Phase21） */
-    const CanFaultConfig *can_fault; /* 送信タスクのみ使用（Phase22） */
-} CanTaskContext;
+    const FaultManager *fault_mgr;
+    const CanFaultConfig *can_fault; /* Phase22 */
+} EngineCanSendContext;
+
+/* メーターECU役の受信タスクが参照するポインタ一式。警告灯・ゲージの両受信タスクで共有する。
+   エンジン監視ECUの内部状態(fault_mgr等)は持たず、CANのbusからだけ受け取る（Phase26） */
+typedef struct {
+    const Ignition *ignition;
+    const CanBus   *can_bus;
+    CanMonitor     *can_monitor;
+    CanDtcRecord   *can_dtc;         /* Phase21 */
+} MeterContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
    CAN送受信タスク（200ms周期、Phase20）が同じSchedulerに混在する現在は、1回のscheduler_run_due呼び出し
@@ -108,7 +116,7 @@ static void run_sample_cycle(void *context) {
 /* エンジンECU役：警告灯データ(CAN_MSG_FAULT_STATUS)をCAN_FAULT_PERIOD_MS周期で送信する。
    ゲージデータと違いfault_mgrの状態(1000ms周期で更新)をそのまま再送するだけの周期タスク（Phase20） */
 static void run_can_send_fault_status(void *context) {
-    CanTaskContext *ctx = (CanTaskContext *)context;
+    EngineCanSendContext *ctx = (EngineCanSendContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
         can_fault_send_fault_status(ctx->can_fault, ctx->can_bus, ctx->fault_mgr);
     }
@@ -117,7 +125,7 @@ static void run_can_send_fault_status(void *context) {
 /* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20）。
    Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 static void run_can_receive_fault_status(void *context) {
-    CanTaskContext *ctx = (CanTaskContext *)context;
+    MeterContext *ctx = (MeterContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
         CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAULT_STATUS];
         CanFaultStatus status;
@@ -130,7 +138,7 @@ static void run_can_receive_fault_status(void *context) {
 /* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20）。
    Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 static void run_can_receive_engine_status(void *context) {
-    CanTaskContext *ctx = (CanTaskContext *)context;
+    MeterContext *ctx = (MeterContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
         CanLinkState previous = ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS];
         CanEngineStatus status;
@@ -216,22 +224,18 @@ int main(void) {
     };
 
     /* 警告灯データ送信タスク(エンジンECU役)用。fault_mgrを読むだけで書き換えない */
-    CanTaskContext can_send_fault_ctx = {
+    EngineCanSendContext can_send_fault_ctx = {
         .ignition    = &ignition,
         .can_bus     = &can_bus,
         .fault_mgr   = &fault_mgr,
-        .can_monitor = NULL,
-        .can_dtc     = NULL,
         .can_fault   = &can_fault_cfg,
     };
     /* 受信タスク(メーターECU役)用。警告灯・ゲージの両受信タスクで共有する */
-    CanTaskContext can_receive_ctx = {
+    MeterContext can_receive_ctx = {
         .ignition    = &ignition,
         .can_bus     = &can_bus,
-        .fault_mgr   = NULL,
         .can_monitor = &can_monitor,
         .can_dtc     = &can_dtc,
-        .can_fault   = NULL,
     };
 
     Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
