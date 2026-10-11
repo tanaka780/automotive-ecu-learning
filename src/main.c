@@ -18,6 +18,7 @@
 #include "can.h"
 #include "can_diag.h"
 #include "can_fault.h"
+#include "meter.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -57,15 +58,6 @@ typedef struct {
     const FaultManager *fault_mgr;
     const CanFaultConfig *can_fault; /* Phase22 */
 } EngineCanSendContext;
-
-/* メーターECU役の受信タスクが参照するポインタ一式。警告灯・ゲージの両受信タスクで共有する。
-   エンジン監視ECUの内部状態(fault_mgr等)は持たず、CANのbusからだけ受け取る（Phase26） */
-typedef struct {
-    const Ignition *ignition;
-    const CanBus   *can_bus;
-    CanMonitor     *can_monitor;
-    CanDtcRecord   *can_dtc;         /* Phase21 */
-} MeterContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
    CAN送受信タスク（200ms周期、Phase20）が同じSchedulerに混在する現在は、1回のscheduler_run_due呼び出し
@@ -122,30 +114,14 @@ static void run_can_send_fault_status(void *context) {
     }
 }
 
-/* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20）。
-   Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
+/* メーターECU役（meter.c）の受信処理をSchedulerのタスクとして呼ぶための変換。void *contextを
+   MeterContext *に戻す処理をmain.c（ECU間の配線）に置き、meter.cは型付きで受け取る（Phase26） */
 static void run_can_receive_fault_status(void *context) {
-    MeterContext *ctx = (MeterContext *)context;
-    if (ctx->ignition->current == IGNITION_ON) {
-        CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAULT_STATUS];
-        CanFaultStatus status;
-        CanLinkState state = can_receive_fault_status(ctx->can_monitor, ctx->can_bus, &status);
-        can_diag_check(ctx->can_dtc, CAN_MSG_FAULT_STATUS, previous, state);
-        can_print_fault_status(&status, state);
-    }
+    meter_receive_fault_status((MeterContext *)context);
 }
 
-/* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20）。
-   Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 static void run_can_receive_engine_status(void *context) {
-    MeterContext *ctx = (MeterContext *)context;
-    if (ctx->ignition->current == IGNITION_ON) {
-        CanLinkState previous = ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS];
-        CanEngineStatus status;
-        CanLinkState state = can_receive_engine_status(ctx->can_monitor, ctx->can_bus, &status);
-        can_diag_check(ctx->can_dtc, CAN_MSG_ENGINE_STATUS, previous, state);
-        can_print_engine_status(&status, state);
-    }
+    meter_receive_engine_status((MeterContext *)context);
 }
 
 int main(void) {

@@ -22,7 +22,7 @@ TEST_CFLAGS_COV = $(TEST_CFLAGS) --coverage
 # モジュールを追加したときはここに追記する
 # ECU_SRCS: ECU本体（src/）、SIM_SRCS: PC上の検証専用（sim/、固定値注入・CAN Fault Injection、Phase25）。
 # sensor_simは両方を合わせてビルドする。main.cがsim/の関数を直接呼んでいるため、現状はsim/を外すとビルドできない
-ECU_SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c
+ECU_SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c src/meter.c
 SIM_SRCS = sim/fixture.c sim/can_fault.c
 SRCS = $(ECU_SRCS) $(SIM_SRCS)
 
