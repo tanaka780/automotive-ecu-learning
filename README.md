@@ -59,13 +59,13 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 make clean && make && make run
 ```
 
-テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c・config.c・fixture.c・validate.c・faultmgr.c・timer.c・scheduler.c・debounce.c・can.c・dtc_status.c・can_diag.c・can_fault.c の動作確認、固定値データ使用。Phase13より[Unity](https://github.com/ThrowTheSwitch/Unity)形式に統一）:
+テスト（diag.c・persist.c・stats.c・alert.c・ignition.c・cmd.c・config.c・fixture.c・validate.c・faultmgr.c・timer.c・scheduler.c・debounce.c・can.c・dtc_status.c・can_diag.c・can_fault.c・fan_ctrl.c の動作確認、固定値データ使用。Phase13より[Unity](https://github.com/ThrowTheSwitch/Unity)形式に統一）:
 
 ```bash
 make test
 ```
 
-テストカバレッジ計測（Phase23。17テストターゲットそれぞれについて、担当モジュール1つのgcov実行行数割合を表示。`lcov`等によるプロジェクト全体の合算は未導入）:
+テストカバレッジ計測（Phase23。18テストターゲットそれぞれについて、担当モジュール1つのgcov実行行数割合を表示。`lcov`等によるプロジェクト全体の合算は未導入）:
 
 ```bash
 make coverage
@@ -137,6 +137,8 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | `can.c` | 実CANに準拠したフレーム構造（ID・DLC・data配列）を持つ`CanFrame`と、メッセージごとに最新の1フレームを保持する`CanBus`（バス役）を提供する。エンジンECU役はゲージデータ（`can_send_engine_status`）・警告灯データ（`can_send_fault_status`、`faultmgr.c`の確定状態をビット詰め）を送信する。メーターECU役は受信時に送信タイムスタンプ（`timer.c`）から新しいフレームかを判定し（非ブロッキング方式）、Timeout（新しいフレームが来ない）・Invalid Data（`validate.c`での値域外判定）を`debounce.c`で確定・復帰させる（`CanLinkState`、`FaultManager`とは別カテゴリの通信専用状態） |
 | `dtc_status.c` | DTCの状態区分（`DtcStatus`：NONE/ACTIVE/HISTORY）と、前回/今回の異常有無を比較して発生回数・状態区分を更新する`dtc_status_update`を提供する。異常の発生源（物理センサかCAN通信か等）は一切知らない汎用ロジックで、`diag.c`・`can_diag.c`の両方から呼ばれる |
 | `can_diag.c` | CAN通信リンク別（`CanMessageId`）のDTC相当の記録（`CanDtcRecord`：発生回数・状態区分）を提供する。`CanLinkState`の前回/今回比較を`dtc_status.c`に渡して更新する（`can_diag_check`）。物理センサの`DtcEntry`（`SensorId`）とは別の識別子で持ち、実車のU-code（通信異常）とP-code（物理故障）の分離に倣う |
+| `meter.c` | メーターECU役の受信処理。警告灯データ・ゲージデータを`can.c`の受信関数で受け取り、CANリンクのLost/RecoveryをDTC相当の記録（`can_diag.c`）に反映して表示する。受け取るcontext（`MeterContext`）はエンジン監視ECUの内部状態へのポインタを持たず、CANのbusとイグニッション状態だけを読む。Schedulerへの登録は`main.c`が行う（Phase26で`main.c`から移動） |
+| `fan_ctrl.c` | ファン制御ECUの、水温によるファンのON/OFF判断（`fan_ctrl_decide`）。80℃以上でON、75℃以下でOFF、その間は前回の要求を保つ（ヒステリシス）。CANは扱わず、受け取った水温と前回の要求から今回の要求を返すだけ。`sensor_sim`からはまだ呼ばず、単体テストのみ（Phase26） |
 | `sim/can_fault.c` | `can_fault.txt`（`MODE=DROP/CORRUPT/NORMAL`、`TARGET=ENGINE_STATUS/FAULT_STATUS`、`START_MS`/`END_MS`）を読み込む。`MODE=DROP`は指定期間だけ`can.c`の送信関数（`can_send_engine_status`/`can_send_fault_status`）の呼び出しをスキップしてTimeoutを再現する。`MODE=CORRUPT`はEngineStatusのみ対応し、送信専用の値域外データ（speed/rpm/temp全て`0xFF`）を持つ一時コピーを作って`can_send_engine_status`に渡すことでInvalid Dataを再現する（実センサ値は変更せず物理センサ診断には影響しない。FaultStatusとの組み合わせは無効な指定として注入なし扱い）。`can.c`本体は変更せず送信をラップするのみ |
 | `test/test_diag.c` | 固定値データによる diag.c の動作確認（`make test`で実行） |
 | `test/test_persist.c` | 固定値データ・意図的に壊したデータによる persist.c の正常系・異常系の動作確認（`make test`で実行） |
@@ -155,6 +157,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | `test/test_dtc_status.c` | dtc_status.c の動作確認（`make test`で実行）。異常発生の瞬間（エッジ）だけ発生回数が増えること、継続中は二重カウントしないこと、解消時のHISTORY遷移、再発生時の再カウントを確認する |
 | `test/test_can_diag.c` | can_diag.c の動作確認（`make test`で実行）。`CanLinkState`のLost確定・Recovery復帰によるDTC相当の記録の更新、メッセージ（EngineStatus/FaultStatus）間の独立性を確認する |
 | `test/test_can_fault.c` | can_fault.c の動作確認（`make test`で実行）。Drop判定（`can_fault_is_dropped`）・Corrupt判定（`can_fault_is_corrupted`）の対象メッセージ一致・時間範囲の境界と、`can_fault.txt`のファイルパース（`can_fault_load`の正常系・異常系、`MODE=CORRUPT`+`TARGET=FAULT_STATUS`が無効な組み合わせとして注入なし扱いになることを含む）を確認する |
+| `test/test_fan_ctrl.c` | fan_ctrl.c の動作確認（`make test`で実行）。ON閾値・OFF閾値ちょうどでの切り替わり、閾値の間では前回の要求を保つこと、閾値の外側では前回の要求に関係なく決まること、水温が上がって下がる一巡でのOFF→ON→OFFを確認する。閾値の数字は直接書かず、`fan_ctrl.h`のマクロとその±1で境界を確かめる |
 | `scenario_test/test_config_failsafe.py` | `sensor_sim`を一時ディレクトリで最後まで実行し、標準出力・終了コードを設定ファイル異常時のフェイルセーフシナリオの期待結果と照合する結合テスト（`make scenario`で実行、Python標準の`unittest`）。`config.txt`が無い場合の2条件（`dtc_data.txt`も無い／`dtc_data.txt`は読み込める）と、`config.txt`が壊れている場合の1条件を確認する |
 | `scenario_test/test_fault_occurrence.py` | `fixture.txt`でセンサ値とイグニッション（ON）を固定して`sensor_sim`を実行し、故障発生シナリオの期待結果と照合する結合テスト（`make scenario`で実行）。水温だけがCRITICALの条件で、警告・DTC・フリーズフレーム・3サンプル目でのDegraded確定・確定後のフェイルセーフ値（警告・統計・メーター表示）を、車速と水温が同時にCRITICALの条件で、両方のDTC記録・フリーズフレームの原因（Speed）・Degradedのセンサだけの差し替えを確認する。固定値は実行中変えられないため、正常値に戻ってのRecoveredは対象外 |
 | `scenario_test/test_power_cycle.py` | 同じ一時ディレクトリで`sensor_sim`を3回続けて実行し、電源再投入シナリオの期待結果と照合する結合テスト（`make scenario`で実行）。初回起動がDTC0件から始まること、終了時の保存、2回目（イグニッションOFF固定でDTCが更新されない）の起動直後にDTC・フリーズフレームが引き継がれていること、`dtc_data.txt`の有無によるPOSTの違い、3回目（再びCRITICAL）に発生回数が2になりフリーズフレームは上書きされないことを確認する |
@@ -192,7 +195,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 | Phase23 | テストカバレッジ計測（gcov） | 完了（17テストターゲットそれぞれについて、既存のソース構成を再利用した`--coverage`付きビルド（`xxx_cov`）を追加し、担当モジュール1つのgcov実行行数割合を`make coverage`で一括表示できるようにした。プロジェクト全体を1つの数値に合算する`lcov`導入は、共有モジュールが複数ターゲットにまたがる場合に自動では合算されないことを実験で確認した上で、必要性が高まった場合の拡張候補として見送った。`main.c`はUnityとリンクできないため対象外のまま） |
 | Phase24 | フォルダ構成の再編成（BSW/アプリ層分割） | 完了（配置の検討（タスク1）のみ実施。PC依存の処理はファイル単位ではなく各ファイル内の一部の関数に限られており、ファイル単位で層に振り分けると層の意味が崩れるため、`src/`の移動は行わず、ドキュメント類の`docs/`への集約のみ実施した） |
 | Phase25 | Python自動検証（シナリオの結合テスト） | 完了（`sensor_sim`に外から入力を与え、`docs/scenarios.md`の期待結果と照合する結合テストとして、検証対象のシナリオとテストの枠組み（`unittest`）を決定した。設定ファイル異常時のフェイルセーフ（`config.txt`が無い場合・壊れている場合）は、`sensor_sim`本体を変更せずに`make scenario`で自動検証できる。PC上の検証専用モジュール（`fixture.c`・`can_fault.c`）を`sim/`へ移動した。`fixture.txt`の`IGNITION=ON/OFF`でイグニッションを固定できるようにし、故障発生（Degraded確定まで）・電源再投入も自動検証できる。3シナリオ・34テストとも、期待値やCの動作をわざと変えると対応するテストだけが落ちることを確認した） |
-| Phase26 | 3ECU化（ファン制御ECUの追加） | 着手中（3ECUは、プロセスを分けずに同じプログラムの中でECUごとのモジュールに分けて動かすことを決定した。流用するエンジン監視ECUは、モジュールのロジックを変えない。下準備として、ヘッダファイルだけを変えた場合にも実行ファイル・テストが作り直されるようにした） |
+| Phase26 | 3ECU化（ファン制御ECUの追加） | 着手中（3ECUは、プロセスを分けずに同じプログラムの中でECUごとのモジュールに分けて動かすことを決定した。流用するエンジン監視ECUは、モジュールのロジックを変えない。下準備として、ヘッダファイルだけを変えた場合にも実行ファイル・テストが作り直されるようにした。メーターECU役の受信処理を`main.c`から新規`meter.c`へ移し、通信故障を入れた実行の出力が移す前と変わらないことを確認した。新しく書くECUのコードにも、MISRA 15.5（単一出口）は適用しない。ファン制御ECUの、水温によるON/OFFのヒステリシス判定（`fan_ctrl.c`）を実装し、単体テストで確認した） |
 ---
 
 ## 既知の制約
@@ -203,6 +206,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 - 診断コマンドは`clear`／`clear <センサ名>`（speed/rpm/temp）のみに対応しており、大文字小文字を区別し前後の空白もトリムしない完全一致判定。拒否理由の区別も「不正なセンサ名」「イグニッションON中で受付不可」「それ以外の想定外コマンド」の3種類にとどまる。他のUDS診断サービスは再現していない
 - 診断コマンドの受付タイミングはサンプルループ終了後の1回のみで変わっていない。イグニッションOFFへ遷移した瞬間を検出して受け付ける（実際の駐車中スキャンツール接続に近い挙動）わけではなく、ループ終了時点の状態がたまたまOFFかどうかで受付可否が決まる
 - 設定ファイル（config.txt）の値は、validate.cでセンサごとの物理的な値域内か（`LOG_LEVEL`は0〜2の範囲内か）をチェックしており、範囲外ならそのキーを無視する。ただし`STATUS_SPEED_WARN`と`STATUS_SPEED_CRIT`のような、閾値同士の大小関係（WARNがCRITより大きい等の矛盾）はチェックしていない
+- ファン制御ECUのON/OFFの閾値（80℃・75℃）は`fan_ctrl.h`のマクロで、`config.txt`からは変えられない（変えるにはビルドし直す必要がある）。`config.c`はエンジン監視ECU側のモジュールのため、ファン側の値は加えていない
 - ログレベル（`LOG_LEVEL`）を上げても、`config.c`自身の読み込み結果ログ（設定ファイルの有無・読み込み完了の通知）は常に表示される。表示閾値はそのconfig読み込みの結果として決まるため、config読み込み自体のログをその閾値で制御できない
 - 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。ただし値は実行中一定の単一固定値のみで、サンプルごとの推移（シーケンス）には対応していない。イグニッションの固定（`IGNITION`）も同じで、実行の途中でON→OFFのように変えることはできない
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
@@ -218,7 +222,7 @@ python3 -m unittest discover -s scenario_test -k test_runs_to_the_end
 - `timer_get_elapsed_ms`（`timer.c`）が返す経過時間は、システム起動（OSブート）からの`CLOCK_MONOTONIC`値であり、プログラム起動からの経過時間ではない。`can_fault.c`のように「起動からN秒後」を扱いたい場合は、基準時刻を別途記録し差分を取る必要がある（`timer_is_due`のような前回値との差分計算は、この基準時刻のズレの影響を受けない）
 - 警告灯データ（`CAN_MSG_FAULT_STATUS`）はビットフラグのみのため、Invalid Data判定（`validate.c`）はゲージデータ（`CAN_MSG_ENGINE_STATUS`）にのみ適用しており、警告灯データはTimeout（未受信）のみを確定・復帰の対象にしている
 - Scheduler（`SCHEDULER_MAX_TASKS`=4）は、サンプル周期タスク・CAN送信タスク・CAN受信タスク2個の計4個で上限に達している。今後さらに周期タスクを追加する場合は`SCHEDULER_MAX_TASKS`の見直しが必要になる
-- `timer_get_elapsed_ms`が返す経過時間（`uint32_t`のミリ秒）は、約49.7日（2^32ミリ秒）で桁あふれする。本プロジェクトの実行時間（1回数十秒）では問題にならないが、実車ECUの連続稼働のような長時間動作は想定していない。またサンプル周期の待機は、コールバックによる自動起動ではなく短い間隔（10ms）でのポーリングのため、ポーリング間隔の分だけ周期にわずかな遅延が生じうる
+- `timer_get_elapsed_ms`が返す経過時間（`uint32_t`のミリ秒）は、約49.7日（2^32ミリ秒）で桁あふれする。本プロジェクトの実行時間（1回数十秒）では問題にならないが、実車ECUの連続稼働のような長時間動作は想定していない。またサンプル周期の待機は、コールバックによる自動起動ではなく短い間隔（10ms）でのポーリングのため、ポーリング間隔の分だけ周期にわずかな遅延が生じうる。同じ`fixture.txt`・`can_fault.txt`で実行しても出力は毎回同じにならない（1サンプルの間に200ms周期の受信が4回の回と5回の回がある、最後のサンプルで1000ms周期の受信が出ない回がある）。原因は、`timer_is_due`が基準時刻を予定の時刻ではなく判定した時刻で更新するため、遅延がタスクごとに積み重なることと推定しているが、時刻を記録して確かめてはいない
 - Scheduler（`scheduler.c`）は優先度・オーバーラン検出を持たず、登録数も固定上限（`SCHEDULER_MAX_TASKS`、4個）で周期0ms・重複登録への防御もない最小構成。実車OSEK/AUTOSAR OSが持つoffset（複数タスクの起動タイミングを意図的にずらし、CPU/バス負荷のスパイクを避ける仕組み）も、タスクが1個のみの現状では効果が無いため実装していない
-- テストカバレッジ計測（`make coverage`）は17テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない
+- テストカバレッジ計測（`make coverage`）は18テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない
 - Makefileは、どの`.h`がどの`.c`に読まれるかを区別せず、`include/`・`sim/`・`test/`のいずれかの`.h`が変われば全ての実行ファイル・テストを作り直す（必要以上に作り直すが、ビルドは数秒で済む）。`vendor/unity/`のヘッダは依存関係に含めていない

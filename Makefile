@@ -122,6 +122,12 @@ TEST_CAN_DIAG_TARGET = test_can_diag
 TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_FAULT_TARGET = test_can_fault
 
+# fan_ctrl.c の動作確認用テスト（水温によるファン要求のヒステリシス判定、main.c は使わない）
+# fan_ctrl.cは他モジュールに依存しないため、fan_ctrl.cのみで足りる。sensor_simからはまだ呼ばないため、
+# ECU_SRCSには含めずテストだけでビルドする（Phase26）
+TEST_FAN_CTRL_SRCS = test/test_fan_ctrl.c src/fan_ctrl.c $(UNITY_DIR)/unity.c
+TEST_FAN_CTRL_TARGET = test_fan_ctrl
+
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
@@ -187,6 +193,9 @@ $(TEST_CAN_DIAG_TARGET): $(TEST_CAN_DIAG_SRCS) $(HEADERS)
 $(TEST_CAN_FAULT_TARGET): $(TEST_CAN_FAULT_SRCS) $(HEADERS)
 	$(CC) $(TEST_CFLAGS) $(TEST_CAN_FAULT_SRCS) -o $(TEST_CAN_FAULT_TARGET)
 
+$(TEST_FAN_CTRL_TARGET): $(TEST_FAN_CTRL_SRCS) $(HEADERS)
+	$(CC) $(TEST_CFLAGS) $(TEST_FAN_CTRL_SRCS) -o $(TEST_FAN_CTRL_TARGET)
+
 # カバレッジ計測用のビルドルール（Phase23）。ソースは既存のTEST_X_SRCSをそのまま再利用し、
 # --coverageを付けた別の実行ファイル（xxx_cov）としてビルドする
 test_diag_cov: $(TEST_DIAG_SRCS) $(HEADERS)
@@ -240,15 +249,18 @@ test_can_diag_cov: $(TEST_CAN_DIAG_SRCS) $(HEADERS)
 test_can_fault_cov: $(TEST_CAN_FAULT_SRCS) $(HEADERS)
 	$(CC) $(TEST_CFLAGS_COV) $(TEST_CAN_FAULT_SRCS) -o test_can_fault_cov
 
-# カバレッジ計測ターゲット: 17ターゲットそれぞれを実行し、担当モジュール（xxx_covに対応する1つの.c）の
+test_fan_ctrl_cov: $(TEST_FAN_CTRL_SRCS) $(HEADERS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_FAN_CTRL_SRCS) -o test_fan_ctrl_cov
+
+# カバレッジ計測ターゲット: 18ターゲットそれぞれを実行し、担当モジュール（xxx_covに対応する1つの.c）の
 # gcov結果（実行行数の割合）を表示する。ターゲット名と担当モジュール名の対応（1ユニット=1テストスイート）
 COVERAGE_PAIRS = test_diag:diag test_persist:persist test_stats:stats test_alert:alert \
 	test_ignition:ignition test_cmd:cmd test_config:config test_fixture:fixture \
 	test_validate:validate test_faultmgr:faultmgr test_timer:timer test_scheduler:scheduler \
 	test_debounce:debounce test_can:can test_dtc_status:dtc_status test_can_diag:can_diag \
-	test_can_fault:can_fault
+	test_can_fault:can_fault test_fan_ctrl:fan_ctrl
 
-coverage: test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignition_cov test_cmd_cov test_config_cov test_fixture_cov test_validate_cov test_faultmgr_cov test_timer_cov test_scheduler_cov test_debounce_cov test_can_cov test_dtc_status_cov test_can_diag_cov test_can_fault_cov
+coverage: test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignition_cov test_cmd_cov test_config_cov test_fixture_cov test_validate_cov test_faultmgr_cov test_timer_cov test_scheduler_cov test_debounce_cov test_can_cov test_dtc_status_cov test_can_diag_cov test_can_fault_cov test_fan_ctrl_cov
 	@for pair in $(COVERAGE_PAIRS); do \
 		target=$${pair%%:*}; \
 		module=$${pair##*:}; \
@@ -261,8 +273,8 @@ coverage: test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_igni
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_can・test_dtc_status・test_can_diag・test_can_faultをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_can・test_dtc_status・test_can_diag・test_can_fault・test_fan_ctrlをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -280,6 +292,7 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_DTC_STATUS_TARGET)
 	./$(TEST_CAN_DIAG_TARGET)
 	./$(TEST_CAN_FAULT_TARGET)
+	./$(TEST_FAN_CTRL_TARGET)
 
 # シナリオ検証ターゲット（Phase25）: sensor_simをPythonから実行し、docs/scenarios.mdの期待結果と照合する。
 # 1条件につきsensor_simを最後まで動かす（約20秒）ため、make testには含めず別ターゲットにしている
@@ -288,5 +301,5 @@ scenario: $(TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET)
+	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET)
 	rm -f *_cov *.gcno *.gcda *.gcov
