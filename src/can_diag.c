@@ -8,6 +8,7 @@ static const char *can_msg_name(CanMessageId msg) {
     switch (msg) {
         case CAN_MSG_ENGINE_STATUS: return "EngineStatus";
         case CAN_MSG_FAULT_STATUS:  return "FaultStatus";
+        case CAN_MSG_FAN_STATUS:    return "FanStatus";
         default:                    return "Unknown";
     }
 }

@@ -32,6 +32,7 @@ void can_monitor_init(CanMonitor *mon) {
     mon->last_fault_status.fault_speed  = false;
     mon->last_fault_status.fault_rpm    = false;
     mon->last_fault_status.fault_temp   = false;
+    mon->last_fan_status.fan_on         = false;
 }
 
 /* エンジンECU役：dataの生値をゲージデータとしてbusへ書く */
@@ -59,6 +60,16 @@ void can_send_fault_status(CanBus *bus, const FaultManager *fault_mgr) {
     frame->id           = CAN_ID_FAULT_STATUS;
     frame->dlc          = 1U;
     frame->data[0]      = flags;
+    frame->timestamp_ms = timer_get_elapsed_ms();
+    frame->valid        = true;
+}
+
+/* ファン制御ECU役：ファン出力をbit0に詰め、ファン状態としてbusへ書く（Phase26） */
+void can_send_fan_status(CanBus *bus, bool fan_on) {
+    CanFrame *frame = &bus->frames[CAN_MSG_FAN_STATUS];
+    frame->id           = CAN_ID_FAN_STATUS;
+    frame->dlc          = 1U;
+    frame->data[0]      = fan_on ? CAN_FAN_BIT_ON : 0U;
     frame->timestamp_ms = timer_get_elapsed_ms();
     frame->valid        = true;
 }
@@ -96,11 +107,9 @@ CanLinkState can_receive_engine_status(CanMonitor *mon, const CanBus *bus, CanEn
                                      &mon->good_count[CAN_MSG_ENGINE_STATUS],
                                      CAN_DEBOUNCE_COUNT, CAN_RECOVERY_COUNT);
 
-    if (now_lost != was_lost) {
-        mon->state[CAN_MSG_ENGINE_STATUS] = now_lost ? CAN_LINK_LOST : CAN_LINK_OK;
-        log_print_leveled(now_lost ? LOG_ERROR : LOG_INFO, "CAN",
-                           now_lost ? "EngineStatus link lost" : "EngineStatus link recovered");
-    }
+    /* Lost/Recoveryのログは呼び出し側（受信するECU）が出す。同じ受信処理を複数のECUが使っても、
+       どのECUが検知したかを区別できるようにするため（Phase26） */
+    mon->state[CAN_MSG_ENGINE_STATUS] = now_lost ? CAN_LINK_LOST : CAN_LINK_OK;
 
     *out = mon->last_engine_status;
     return mon->state[CAN_MSG_ENGINE_STATUS];
@@ -128,14 +137,38 @@ CanLinkState can_receive_fault_status(CanMonitor *mon, const CanBus *bus, CanFau
                                      &mon->good_count[CAN_MSG_FAULT_STATUS],
                                      CAN_DEBOUNCE_COUNT, CAN_RECOVERY_COUNT);
 
-    if (now_lost != was_lost) {
-        mon->state[CAN_MSG_FAULT_STATUS] = now_lost ? CAN_LINK_LOST : CAN_LINK_OK;
-        log_print_leveled(now_lost ? LOG_ERROR : LOG_INFO, "CAN",
-                           now_lost ? "FaultStatus link lost" : "FaultStatus link recovered");
-    }
+    /* Lost/Recoveryのログは呼び出し側が出す（can_receive_engine_statusと同じ理由） */
+    mon->state[CAN_MSG_FAULT_STATUS] = now_lost ? CAN_LINK_LOST : CAN_LINK_OK;
 
     *out = mon->last_fault_status;
     return mon->state[CAN_MSG_FAULT_STATUS];
+}
+
+/* メーターECU役：busから最新のファン状態を読み、Timeoutを検知してmonを更新する（Phase26）。
+   警告灯データと同じくビットフラグのため、Invalid Dataの判定は行わない */
+CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanStatus *out) {
+    const CanFrame *frame = &bus->frames[CAN_MSG_FAN_STATUS];
+    bool is_new = frame->valid && (frame->timestamp_ms != mon->last_seen_timestamp_ms[CAN_MSG_FAN_STATUS]);
+
+    if (is_new) {
+        mon->last_seen_timestamp_ms[CAN_MSG_FAN_STATUS] = frame->timestamp_ms;
+        mon->last_fan_status.fan_on = (frame->data[0] & CAN_FAN_BIT_ON) != 0U;
+    }
+
+    bool is_bad  = !is_new;
+    bool is_good = is_new;
+
+    bool was_lost = (mon->state[CAN_MSG_FAN_STATUS] == CAN_LINK_LOST);
+    bool now_lost = debounce_update(was_lost, is_bad, is_good,
+                                     &mon->bad_count[CAN_MSG_FAN_STATUS],
+                                     &mon->good_count[CAN_MSG_FAN_STATUS],
+                                     CAN_DEBOUNCE_COUNT, CAN_RECOVERY_COUNT);
+
+    /* Lost/Recoveryのログは呼び出し側が出す（can_receive_engine_statusと同じ理由） */
+    mon->state[CAN_MSG_FAN_STATUS] = now_lost ? CAN_LINK_LOST : CAN_LINK_OK;
+
+    *out = mon->last_fan_status;
+    return mon->state[CAN_MSG_FAN_STATUS];
 }
 
 /* メーターECU役の表示：受信したゲージデータとリンク状態を1行でコンソールに出力する */

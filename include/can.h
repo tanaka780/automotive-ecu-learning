@@ -15,6 +15,7 @@
 typedef enum {
     CAN_MSG_FAULT_STATUS = 0,  /* 警告灯データ（確定異常フラグ、200ms周期） */
     CAN_MSG_ENGINE_STATUS,     /* ゲージデータ（speed/rpm/tempの生値、1000ms周期） */
+    CAN_MSG_FAN_STATUS,        /* ファン状態（ファン制御ECU→メーターECU、1000ms周期、Phase26） */
     CAN_MSG_COUNT
 } CanMessageId;
 
@@ -22,11 +23,15 @@ typedef enum {
    異常系（警告灯）を優先させるため小さい値にした */
 #define CAN_ID_FAULT_STATUS  0x100U
 #define CAN_ID_ENGINE_STATUS 0x200U
+#define CAN_ID_FAN_STATUS    0x300U
 
 /* 警告灯データ(data[0])のビット割り当て。FaultManagerのSensorId(sensor.h)の並びに合わせる */
 #define CAN_FAULT_BIT_SPEED 0x01U
 #define CAN_FAULT_BIT_RPM   0x02U
 #define CAN_FAULT_BIT_TEMP  0x04U
+
+/* ファン状態(data[0])のビット割り当て（Phase26） */
+#define CAN_FAN_BIT_ON 0x01U
 
 /* Timeout/Invalid Dataの確定・復帰に必要な連続回数。faultmgr.cのDebounce/Recoveryと同じ3回 */
 #define CAN_DEBOUNCE_COUNT 3U
@@ -62,6 +67,11 @@ typedef struct {
     bool fault_temp;
 } CanFaultStatus;
 
+/* 受信側が復元したファン状態（Phase26） */
+typedef struct {
+    bool fan_on;
+} CanFanStatus;
+
 /* メッセージ単位の通信リンク状態。物理センサの異常(FaultState)とは別カテゴリとして扱う
    （実車のDTC分類、P-code=センサ等の物理故障とU-code=ECU間通信異常が別カテゴリなのに倣う） */
 typedef enum {
@@ -78,6 +88,7 @@ typedef struct {
     CanLinkState    state[CAN_MSG_COUNT];
     CanEngineStatus last_engine_status;
     CanFaultStatus  last_fault_status;
+    CanFanStatus    last_fan_status;   /* Phase26 */
 } CanMonitor;
 
 /* busの全フレームをvalid=falseの初期状態にする */
@@ -89,6 +100,9 @@ void can_monitor_init(CanMonitor *mon);
 void can_send_engine_status(CanBus *bus, const VehicleSensorData *data);
 /* エンジンECU役：fault_mgrの確定状態(FAULT_DEGRADED)をビット詰めし警告灯データとしてbusへ書く */
 void can_send_fault_status(CanBus *bus, const FaultManager *fault_mgr);
+/* ファン制御ECU役：まとめた後のファン出力(fan_on)をファン状態としてbusへ書く（Phase26）。
+   水温による要求・強制ONの区別は送らず、実際の出力だけを送る */
+void can_send_fan_status(CanBus *bus, bool fan_on);
 
 /* メーターECU役：busから最新のゲージデータを読み、Timeout（新しいフレームが来ていない）・
    Invalid Data（値域外、validate.cで判定）を検知してmonの状態を更新する。
@@ -96,6 +110,8 @@ void can_send_fault_status(CanBus *bus, const FaultManager *fault_mgr);
 CanLinkState can_receive_engine_status(CanMonitor *mon, const CanBus *bus, CanEngineStatus *out);
 /* メーターECU役：busから最新の警告灯データを読み、Timeoutを検知してmonの状態を更新する */
 CanLinkState can_receive_fault_status(CanMonitor *mon, const CanBus *bus, CanFaultStatus *out);
+/* メーターECU役：busから最新のファン状態を読み、Timeoutを検知してmonの状態を更新する（Phase26） */
+CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanStatus *out);
 
 /* メーターECU役の表示：受信したゲージデータとリンク状態を1行でコンソールに出力する */
 void can_print_engine_status(const CanEngineStatus *status, CanLinkState state);

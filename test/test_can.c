@@ -164,6 +164,61 @@ static void test_fault_status_timeout_after_missed_receptions(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_LOST, "3回連続で未受信ならCAN_LINK_LOSTに確定する");
 }
 
+/* ファン出力ONが、ファン状態のbit0として正しく復元されることを確認する（Phase26） */
+static void test_fan_status_roundtrip_on(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    can_send_fan_status(&bus, true);
+
+    CanFanStatus status;
+    CanLinkState state = can_receive_fan_status(&mon, &bus, &status);
+
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "有効なフレームを受信すればCAN_LINK_OK");
+    TEST_ASSERT_TRUE_MESSAGE(status.fan_on, "ファンONが復元される");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(CAN_FAN_BIT_ON, bus.frames[CAN_MSG_FAN_STATUS].data[0], "ONはbit0だけが立つ");
+}
+
+/* ファン出力OFFが復元されることを確認する。初期値(false)と区別するため、一度ONを受信してからOFFを送る */
+static void test_fan_status_roundtrip_off(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    CanFanStatus status;
+    can_send_fan_status(&bus, true);
+    (void)can_receive_fan_status(&mon, &bus, &status);
+
+    sleep_ms(5);   /* 前回と送信時刻(timestamp_ms)を変え、新しいフレームとして受信させる */
+    can_send_fan_status(&bus, false);
+    CanLinkState state = can_receive_fan_status(&mon, &bus, &status);
+
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "有効なフレームを受信すればCAN_LINK_OK");
+    TEST_ASSERT_FALSE_MESSAGE(status.fan_on, "ON受信後にOFFを受信すればOFFになる");
+}
+
+/* ファン状態も、一度も送信されないまま受信を3回連続で呼ぶとCAN_LINK_LOSTになることを確認する */
+static void test_fan_status_timeout_after_missed_receptions(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    CanFanStatus status;
+    CanLinkState state;
+
+    for (int i = 0; i < 2; i++) {
+        state = can_receive_fan_status(&mon, &bus, &status);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "2回連続の未受信ではまだCAN_LINK_OK");
+
+    state = can_receive_fan_status(&mon, &bus, &status);
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_LOST, "3回連続で未受信ならCAN_LINK_LOSTに確定する");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -175,6 +230,9 @@ int main(void) {
     RUN_TEST(test_engine_status_recovers_after_valid_receptions);
     RUN_TEST(test_fault_status_roundtrip);
     RUN_TEST(test_fault_status_timeout_after_missed_receptions);
+    RUN_TEST(test_fan_status_roundtrip_on);
+    RUN_TEST(test_fan_status_roundtrip_off);
+    RUN_TEST(test_fan_status_timeout_after_missed_receptions);
 
     return UNITY_END();
 }
