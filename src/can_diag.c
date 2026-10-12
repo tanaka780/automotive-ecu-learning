@@ -41,8 +41,8 @@ void can_diag_check(CanDtcRecord *rec, CanMessageId msg, CanLinkState previous, 
     dtc_status_update(&rec->count[msg], &rec->status[msg], was_bad, is_bad);
 }
 
-/* 記録された内容をコンソールに出力する */
-void can_diag_print(const CanDtcRecord *rec) {
+/* 記録された内容を、tagを付けてコンソールに出力する */
+void can_diag_print(const CanDtcRecord *rec, const char *tag) {
     char line[64];   /* "EngineStatus  HISTORY link lost occurrences: 255" が収まるサイズ */
 
     for (int i = 0; i < (int)CAN_MSG_COUNT; i++) {
@@ -51,6 +51,6 @@ void can_diag_print(const CanDtcRecord *rec) {
                         can_msg_name((CanMessageId)i),
                         can_diag_dtc_status_to_str(rec->status[i]),
                         (int)rec->count[i]);
-        log_print_leveled(LOG_INFO, "CAN-DTC", line);
+        log_print_leveled(LOG_INFO, tag, line);
     }
 }

@@ -139,6 +139,61 @@ static void test_load_target_fault_status(void) {
     TEST_ASSERT_TRUE_MESSAGE(cfg.target == CAN_MSG_FAULT_STATUS, "TARGET=FAULT_STATUS: targetが反映される");
 }
 
+/* can_fault_load: TARGET=FAN_STATUS（ファン制御ECU役の送信）も反映され、DropはFanStatusだけに効くことを確認する（Phase26） */
+static void test_load_target_fan_status(void) {
+    write_raw(TEST_CAN_FAULT_FILENAME,
+        "MODE=DROP\n"
+        "TARGET=FAN_STATUS\n"
+        "START_MS=0\n"
+        "END_MS=1000\n");
+
+    CanFaultConfig cfg;
+    can_fault_init(&cfg);
+    bool ok = can_fault_load(&cfg, TEST_CAN_FAULT_FILENAME);
+
+    TEST_ASSERT_TRUE_MESSAGE(ok, "TARGET=FAN_STATUS: 戻り値はtrue");
+    TEST_ASSERT_TRUE_MESSAGE(cfg.target == CAN_MSG_FAN_STATUS, "TARGET=FAN_STATUS: targetが反映される");
+    TEST_ASSERT_TRUE_MESSAGE(can_fault_is_dropped(&cfg, CAN_MSG_FAN_STATUS, 500U), "FanStatusは期間内ならDropする");
+    TEST_ASSERT_FALSE_MESSAGE(can_fault_is_dropped(&cfg, CAN_MSG_FAULT_STATUS, 500U), "FaultStatusはDropしない");
+    TEST_ASSERT_FALSE_MESSAGE(can_fault_is_dropped(&cfg, CAN_MSG_ENGINE_STATUS, 500U), "EngineStatusはDropしない");
+}
+
+/* can_fault_load: MODE=CORRUPT・TARGET=FAN_STATUSも、FAULT_STATUSと同じく無効な組み合わせになることを確認する（Phase26） */
+static void test_load_mode_corrupt_fan_status_is_invalid(void) {
+    write_raw(TEST_CAN_FAULT_FILENAME,
+        "MODE=CORRUPT\n"
+        "TARGET=FAN_STATUS\n"
+        "START_MS=0\n"
+        "END_MS=1000\n");
+
+    CanFaultConfig cfg;
+    can_fault_init(&cfg);
+    bool ok = can_fault_load(&cfg, TEST_CAN_FAULT_FILENAME);
+
+    TEST_ASSERT_FALSE_MESSAGE(ok, "MODE=CORRUPT+FAN_STATUS: 無効な組み合わせのため戻り値はfalse");
+    TEST_ASSERT_TRUE_MESSAGE(cfg.mode == CAN_FAULT_MODE_NONE, "MODE=CORRUPT+FAN_STATUS: modeはNONEのまま");
+}
+
+/* can_fault_send_fan_status: Drop期間中はbusに書かず、期間外なら書くことを確認する（Phase26）。
+   経過時間はプログラム起動からなので、START_MSを0・END_MSを大きく取り、テスト中は常にDrop期間内にする */
+static void test_send_fan_status_dropped(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanFaultConfig cfg;
+    can_fault_init(&cfg);
+
+    can_fault_send_fan_status(&cfg, &bus, true);
+    TEST_ASSERT_TRUE_MESSAGE(bus.frames[CAN_MSG_FAN_STATUS].valid, "注入なしなら送信される");
+
+    can_bus_init(&bus);
+    cfg.mode     = CAN_FAULT_MODE_DROP;
+    cfg.target   = CAN_MSG_FAN_STATUS;
+    cfg.start_ms = 0U;
+    cfg.end_ms   = 1000000U;
+    can_fault_send_fan_status(&cfg, &bus, true);
+    TEST_ASSERT_FALSE_MESSAGE(bus.frames[CAN_MSG_FAN_STATUS].valid, "Drop期間中は送信されない");
+}
+
 /* can_fault_load: ファイルが無い場合はfalseを返し、cfgを変更しないことを確認する */
 static void test_load_file_missing(void) {
     CanFaultConfig cfg;
@@ -226,6 +281,9 @@ int main(void) {
     RUN_TEST(test_load_mode_corrupt_engine_status);
     RUN_TEST(test_load_mode_corrupt_fault_status_is_invalid);
     RUN_TEST(test_load_target_fault_status);
+    RUN_TEST(test_load_target_fan_status);
+    RUN_TEST(test_load_mode_corrupt_fan_status_is_invalid);
+    RUN_TEST(test_send_fan_status_dropped);
     RUN_TEST(test_load_file_missing);
     RUN_TEST(test_load_mode_normal);
     RUN_TEST(test_load_missing_target_is_inactive);

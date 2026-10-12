@@ -117,5 +117,7 @@ CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanSt
 void can_print_engine_status(const CanEngineStatus *status, CanLinkState state);
 /* メーターECU役の表示：受信した警告灯データとリンク状態を1行でコンソールに出力する */
 void can_print_fault_status(const CanFaultStatus *status, CanLinkState state);
+/* メーターECU役の表示：受信したファン状態とリンク状態を1行でコンソールに出力する（Phase26） */
+void can_print_fan_status(const CanFanStatus *status, CanLinkState state);
 
 #endif /* CAN_H */

@@ -38,9 +38,9 @@ typedef struct {
    timer_get_elapsed_msで記録するため、main()の起動直後に呼ぶ想定 */
 void can_fault_init(CanFaultConfig *cfg);
 
-/* 指定したファイルをKEY=VALUE形式（MODE=DROP/CORRUPT/NORMAL, TARGET=ENGINE_STATUS/FAULT_STATUS,
+/* 指定したファイルをKEY=VALUE形式（MODE=DROP/CORRUPT/NORMAL, TARGET=ENGINE_STATUS/FAULT_STATUS/FAN_STATUS,
    START_MS=, END_MS=）で読み込む。MODE=DROPまたはCORRUPTかつTARGETが指定されていればcfgに反映し
-   trueを返す。ただしMODE=CORRUPT+TARGET=FAULT_STATUSは無効な組み合わせとして注入なし扱いにする。
+   trueを返す。ただしMODE=CORRUPTとENGINE_STATUS以外のTARGETの組み合わせは無効として注入なし扱いにする。
    ファイルが無い場合・MODE=NORMALの場合・MODE/TARGET行が無い/不正な場合はcfgを初期値のまま
    （注入なし）にしてfalseを返す。START_MSとEND_MSの大小関係はチェックしない
    （Phase12で決めた「閾値同士の大小関係はチェックしない」方針を踏襲） */
@@ -65,5 +65,8 @@ void can_fault_send_engine_status(const CanFaultConfig *cfg, CanBus *bus, const 
 
 /* エンジンECU役の送信をラップする（警告灯データ版） */
 void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const FaultManager *fault_mgr);
+
+/* ファン制御ECU役の送信をラップする（ファン状態版、Phase26）。Drop対象の期間は送信しない */
+void can_fault_send_fan_status(const CanFaultConfig *cfg, CanBus *bus, bool fan_on);
 
 #endif /* CAN_FAULT_H */

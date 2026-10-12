@@ -37,3 +37,19 @@ void meter_receive_engine_status(MeterContext *ctx) {
         can_print_engine_status(&status, state);
     }
 }
+
+/* メーターECU役：ファン制御ECUからのファン状態を受信し、Timeoutを検知して表示する（Phase26）。
+   途絶はファン制御ECUの異常として、CanDtcRecordのFanStatusへ記録する */
+void meter_receive_fan_status(MeterContext *ctx) {
+    if (ctx->ignition->current == IGNITION_ON) {
+        CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAN_STATUS];
+        CanFanStatus status;
+        CanLinkState state = can_receive_fan_status(ctx->can_monitor, ctx->can_bus, &status);
+        if (state != previous) {
+            log_print_leveled((state == CAN_LINK_LOST) ? LOG_ERROR : LOG_INFO, "CAN",
+                              (state == CAN_LINK_LOST) ? "FanStatus link lost" : "FanStatus link recovered");
+        }
+        can_diag_check(ctx->can_dtc, CAN_MSG_FAN_STATUS, previous, state);
+        can_print_fan_status(&status, state);
+    }
+}

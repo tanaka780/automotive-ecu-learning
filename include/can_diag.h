@@ -21,7 +21,8 @@ void can_diag_init(CanDtcRecord *rec);
    確定Lost（CAN_LINK_LOST）に入った瞬間だけ発生回数を増やす（判定自体はdtc_status_updateに委譲する） */
 void can_diag_check(CanDtcRecord *rec, CanMessageId msg, CanLinkState previous, CanLinkState current);
 
-/* 記録された内容をコンソールに出力する */
-void can_diag_print(const CanDtcRecord *rec);
+/* 記録された内容をコンソールに出力する。tagは記録を持つECUごとに変える（メーターECUは"CAN-DTC"）。
+   同じ記録の形をメーターECUとファン制御ECUがそれぞれ持つため、どちらの記録かを区別できるようにする（Phase26） */
+void can_diag_print(const CanDtcRecord *rec, const char *tag);
 
 #endif /* CAN_DIAG_H */

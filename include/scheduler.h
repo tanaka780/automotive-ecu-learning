@@ -9,8 +9,8 @@
 /* Schedulerに登録するタスク関数の型。scheduler_add_task時に渡したcontextがそのまま渡される */
 typedef void (*SchedulerTaskFunc)(void *context);
 
-/* 登録できるタスクの最大数。現状は1個のみ使用するが、将来のCAN受信/送信タスク等の追加に備えて余裕を持たせる */
-#define SCHEDULER_MAX_TASKS 4U
+/* 登録できるタスクの最大数。ファン制御ECUのタスクを登録するときに4から8へ上げた（Phase26） */
+#define SCHEDULER_MAX_TASKS 8U
 
 /* タスク1個分：呼び出す関数・渡すcontext・周期判定用のTimer・初回実行済みかどうかを保持する */
 typedef struct {

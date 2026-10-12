@@ -18,6 +18,8 @@ test_can
 test_dtc_status
 test_can_diag
 test_can_fault
+test_fan_ctrl
+test_fan_ecu
 dtc_data.txt
 test_dtc_data.txt
 test_config.txt

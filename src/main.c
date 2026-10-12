@@ -19,6 +19,7 @@
 #include "can_diag.h"
 #include "can_fault.h"
 #include "meter.h"
+#include "fan_ecu.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -58,6 +59,14 @@ typedef struct {
     const FaultManager *fault_mgr;
     const CanFaultConfig *can_fault; /* Phase22 */
 } EngineCanSendContext;
+
+/* ファン制御ECU役のファン状態送信タスク(run_fan_send_fan_status)が参照するポインタ一式（Phase26）。
+   FanEcuContextはbusを読むだけ(const)なので、busへ書く送信用はEngineCanSendContextと同じく分ける */
+typedef struct {
+    FanEcuContext        *fan;
+    CanBus               *can_bus;
+    const CanFaultConfig *can_fault;   /* 送信をラップしてファン状態を止める（Phase26） */
+} FanCanSendContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
    CAN送受信タスク（200ms周期、Phase20）が同じSchedulerに混在する現在は、1回のscheduler_run_due呼び出し
@@ -124,6 +133,30 @@ static void run_can_receive_engine_status(void *context) {
     meter_receive_engine_status((MeterContext *)context);
 }
 
+static void run_can_receive_fan_status(void *context) {
+    meter_receive_fan_status((MeterContext *)context);
+}
+
+/* ファン制御ECU役（fan_ecu.c）の受信処理も、メーターECU役と同じ形で変換して呼ぶ（Phase26） */
+static void run_fan_receive_fault_status(void *context) {
+    fan_ecu_receive_fault_status((FanEcuContext *)context);
+}
+
+static void run_fan_receive_engine_status(void *context) {
+    fan_ecu_receive_engine_status((FanEcuContext *)context);
+}
+
+/* ファン制御ECU役：ファン状態(CAN_MSG_FAN_STATUS)をSAMPLE_PERIOD_MS周期で送信する（Phase26）。
+   何を送るかはfan_ecu.cが決め、busへの書き込みはエンジンECU役の送信と同じくここで行う。
+   can_fault.txtでFAN_STATUSのDrop期間が指定されていれば、意図的に送信しない */
+static void run_fan_send_fan_status(void *context) {
+    FanCanSendContext *ctx = (FanCanSendContext *)context;
+    bool fan_on = false;
+    if (fan_ecu_get_fan_status(ctx->fan, &fan_on)) {
+        can_fault_send_fan_status(ctx->can_fault, ctx->can_bus, fan_on);
+    }
+}
+
 int main(void) {
     /* srand: time(NULL) を種にすることで実行ごとに異なる乱数列を生成する */
     srand((unsigned int)time(NULL));
@@ -176,6 +209,14 @@ int main(void) {
     can_monitor_init(&can_monitor);
     CanDtcRecord can_dtc;              /* CAN通信リンクのDTC相当の記録（発生回数・状態区分、Phase21） */
     can_diag_init(&can_dtc);
+    /* ファン制御ECU役の受信監視状態とDTC相当の記録（Phase26）。途絶は検知したECUごとに持つため、
+       メーターECU役のものとは分ける */
+    CanMonitor fan_can_monitor;
+    can_monitor_init(&fan_can_monitor);
+    CanDtcRecord fan_can_dtc;
+    can_diag_init(&fan_can_dtc);
+    FanEcuState fan_state;             /* ファン制御ECU役の判断の状態（水温・要求・出力） */
+    fan_ecu_init(&fan_state);
 
     /* CAN Fault Injection（Phase22）：can_fault.txtがあれば、指定したメッセージ・期間だけ
        意図的に送信をスキップする（Timeoutの実行時再現）。ファイルが無い/MODE=NORMALならinactiveのまま */
@@ -206,22 +247,42 @@ int main(void) {
         .fault_mgr   = &fault_mgr,
         .can_fault   = &can_fault_cfg,
     };
-    /* 受信タスク(メーターECU役)用。警告灯・ゲージの両受信タスクで共有する */
+    /* 受信タスク(メーターECU役)用。警告灯・ゲージ・ファン状態の受信タスクで共有する */
     MeterContext can_receive_ctx = {
         .ignition    = &ignition,
         .can_bus     = &can_bus,
         .can_monitor = &can_monitor,
         .can_dtc     = &can_dtc,
     };
+    /* 受信タスク(ファン制御ECU役)用。警告灯・ゲージの両受信タスクで共有する（Phase26） */
+    FanEcuContext fan_ctx = {
+        .ignition    = &ignition,
+        .can_bus     = &can_bus,
+        .can_monitor = &fan_can_monitor,
+        .can_dtc     = &fan_can_dtc,
+        .state       = &fan_state,
+    };
+    /* 送信タスク(ファン制御ECU役)用（Phase26） */
+    FanCanSendContext fan_send_ctx = {
+        .fan       = &fan_ctx,
+        .can_bus   = &can_bus,
+        .can_fault = &can_fault_cfg,
+    };
 
     Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
     scheduler_init(&scheduler);
-    /* SCHEDULER_MAX_TASKS(4)に対し登録は4個（サンプル1・CAN送信1・CAN受信2）のため、
-       いずれも失敗は想定していない（MISRA 17.7） */
+    /* SCHEDULER_MAX_TASKS(8)に対し登録は8個（サンプル1・CAN送信1・メーターECU受信2・ファン制御ECU受信2・
+       ファン制御ECU送信1・メーターECUのファン状態受信1）で、上限ちょうど。いずれも失敗は想定していない
+       （MISRA 17.7）。Phase26で足したタスクは既存4タスクの後に登録し、既存の登録順は変えない。
+       メーターECUのファン状態受信は、同じ周期のファン状態送信の後に登録する */
     (void)scheduler_add_task(&scheduler, run_sample_cycle, &ctx, SAMPLE_PERIOD_MS);
     (void)scheduler_add_task(&scheduler, run_can_send_fault_status, &can_send_fault_ctx, CAN_FAULT_PERIOD_MS);
     (void)scheduler_add_task(&scheduler, run_can_receive_fault_status, &can_receive_ctx, CAN_FAULT_PERIOD_MS);
     (void)scheduler_add_task(&scheduler, run_can_receive_engine_status, &can_receive_ctx, SAMPLE_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_fan_receive_fault_status, &fan_ctx, CAN_FAULT_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_fan_receive_engine_status, &fan_ctx, SAMPLE_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_fan_send_fan_status, &fan_send_ctx, SAMPLE_PERIOD_MS);
+    (void)scheduler_add_task(&scheduler, run_can_receive_fan_status, &can_receive_ctx, SAMPLE_PERIOD_MS);
 
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く。
        CAN送受信タスク（200ms周期）がsample_cycle（1000ms周期）より高頻度で混在するため、
@@ -233,7 +294,8 @@ int main(void) {
 
     stats_print(&stats);
     diag_print(&dtc);                                 /* DTC一覧を表示する */
-    can_diag_print(&can_dtc);                         /* CAN通信リンクのDTC相当の記録を表示する（Phase21） */
+    can_diag_print(&can_dtc, "CAN-DTC");              /* メーターECU役のCAN通信リンクのDTC相当の記録を表示する（Phase21） */
+    can_diag_print(&fan_can_dtc, "FAN-DTC");          /* ファン制御ECU役の記録を表示する（Phase26） */
 
     /* 実車でスキャンツールが駐車中(イグニッションOFF)に接続される状況を再現し、OFF時のみコマンドを受け付ける */
     if (ignition.current == IGNITION_OFF) {

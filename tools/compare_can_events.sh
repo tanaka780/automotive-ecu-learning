@@ -11,27 +11,36 @@
 # 正規化（Day55の最終形）:
 #   - [CAN] / [CAN-DTC] / [METER] の行だけを残す
 #   - 最後のサンプル（[Sample 20]以降）の[METER]行は除く（受信が出ない回があるため）
-#   - EngineStatus・FaultStatus・[CAN-DTC]を別々に並べる（メッセージをまたぐ受信の前後は揺れるため）
+#   - EngineStatus・FaultStatus・FanStatus（Day57で追加）・[CAN-DTC]を別々に並べる（メッセージをまたぐ受信の前後は揺れるため）
 #   - 同じ行が続く部分は1行にまとめる（1サンプル中の受信回数が4回・5回と揺れるため）
 #   - サンプル番号は見ない（LOSTの出るサンプルが6・7とずれる回があるため）
 #   - sensor_simの終了コードを先頭に書く（異常終了を一致と見誤らないため）
+#   - ファン制御ECU役の[FAN]/[FAN-DTC]の行は、別の欄に出た順のまま並べる（Day57）
 # 位置を見ないので、周期・登録順の誤りはこの比較では見つからない。そこはコードの差分で見る
 
 set -u
 
-CONDITIONS="drop_engine drop_fault corrupt normal ign_off"
+# *_coolは水温50℃（ファンのOFF閾値より低い）で通信を止める条件（Day57で追加）。TEMP=95の条件では
+# ファンが最初から最後までONのままなので、受信途絶による強制ONが出力に現れない
+# drop_fanはファン制御ECU役のファン状態の送信を止める条件（Day57で追加）
+CONDITIONS="drop_engine drop_fault corrupt normal ign_off drop_engine_cool drop_fault_cool drop_fan"
 
 write_inputs() {
     local cond="$1" dir="$2"
-    local ign="ON"
+    local ign="ON" temp=95
     if [ "$cond" = "ign_off" ]; then
         ign="OFF"
     fi
-    printf 'MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=95\nIGNITION=%s\n' "$ign" > "$dir/fixture.txt"
+    case "$cond" in
+        *_cool) temp=50 ;;
+        *) ;;
+    esac
+    printf 'MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=%s\nIGNITION=%s\n' "$temp" "$ign" > "$dir/fixture.txt"
 
     case "$cond" in
-        drop_engine) printf 'MODE=DROP\nTARGET=ENGINE_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
-        drop_fault)  printf 'MODE=DROP\nTARGET=FAULT_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
+        drop_engine|drop_engine_cool) printf 'MODE=DROP\nTARGET=ENGINE_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
+        drop_fault|drop_fault_cool)   printf 'MODE=DROP\nTARGET=FAULT_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
+        drop_fan)                     printf 'MODE=DROP\nTARGET=FAN_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
         corrupt)     printf 'MODE=CORRUPT\nTARGET=ENGINE_STATUS\nSTART_MS=5500\nEND_MS=10500\n' > "$dir/can_fault.txt" ;;
         *) ;;
     esac
@@ -48,12 +57,16 @@ normalize() {
          }' "$raw")
     # メッセージごとに分けて並べる。EngineStatusとFaultStatusの受信の前後は
     # タスクの遅れで入れ替わる（Day56で確認）ため、メッセージをまたぐ順番は比べない
-    for msg in EngineStatus FaultStatus; do
+    for msg in EngineStatus FaultStatus FanStatus; do
         echo "## $msg"
         printf '%s\n' "$filtered" | grep -E "^\[(CAN|METER)\] $msg" | uniq
     done
     echo "## CAN-DTC"
     printf '%s\n' "$filtered" | grep -E '^\[CAN-DTC\] '
+    # ファン制御ECU役の行（Day57で追加）。途絶・復帰とファン出力の変化は、変わった瞬間にしか出ないので
+    # 1サンプル中の受信回数の揺れを受けない。メーターECUの行とは別に、出た順のまま比べる
+    echo "## FAN"
+    grep -E '^\[(FAN|FAN-DTC)\] ' "$raw"
 }
 
 capture() {

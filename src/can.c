@@ -191,3 +191,12 @@ void can_print_fault_status(const CanFaultStatus *status, CanLinkState state) {
                    state_str, (int)status->fault_speed, (int)status->fault_rpm, (int)status->fault_temp);
     log_print_leveled(LOG_INFO, "METER", line);
 }
+
+/* メーターECU役の表示：受信したファン状態とリンク状態を1行でコンソールに出力する（Phase26） */
+void can_print_fan_status(const CanFanStatus *status, CanLinkState state) {
+    char line[32];   /* "FanStatus[LOST] fan=1" が収まるサイズ */
+    const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
+
+    (void)snprintf(line, sizeof(line), "FanStatus[%s] fan=%d", state_str, (int)status->fan_on);
+    log_print_leveled(LOG_INFO, "METER", line);
+}

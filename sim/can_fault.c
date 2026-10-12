@@ -55,6 +55,9 @@ static void can_fault_apply_line(CanFaultValues *fv, const char *line) {
         } else if (strcmp(str_value, "FAULT_STATUS") == 0) {
             fv->target_seen = true;
             fv->cfg.target  = CAN_MSG_FAULT_STATUS;
+        } else if (strcmp(str_value, "FAN_STATUS") == 0) {
+            fv->target_seen = true;
+            fv->cfg.target  = CAN_MSG_FAN_STATUS;   /* ファン制御ECU役の送信（Phase26） */
         } else {
             /* 不正なTARGET値は無視する */
         }
@@ -102,7 +105,7 @@ bool can_fault_load(CanFaultConfig *cfg, const char *filename) {
 
     /* CORRUPTはENGINE_STATUSのみ対応する。FAULT_STATUSはビットフラグのみでcan.cにInvalid Data
        判定ロジックが無く、Corruptしても検出できず意味を持たないため、無効な組み合わせとして
-       注入なし扱いにする（Phase22拡張バックログで決定） */
+       注入なし扱いにする（Phase22拡張バックログで決定）。FAN_STATUSも同じ理由で無効（Phase26） */
     bool corrupt_target_invalid = (fv.parsed_mode == CAN_FAULT_MODE_CORRUPT)
                                  && (fv.cfg.target != CAN_MSG_ENGINE_STATUS);
 
@@ -172,4 +175,11 @@ void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const F
         return;   /* 意図的に送信しない(Timeoutを再現) */
     }
     can_send_fault_status(bus, fault_mgr);
+}
+
+void can_fault_send_fan_status(const CanFaultConfig *cfg, CanBus *bus, bool fan_on) {
+    if (can_fault_is_dropped(cfg, CAN_MSG_FAN_STATUS, can_fault_elapsed_since_start(cfg))) {
+        return;   /* 意図的に送信しない(Timeoutを再現) */
+    }
+    can_send_fan_status(bus, fan_on);
 }
