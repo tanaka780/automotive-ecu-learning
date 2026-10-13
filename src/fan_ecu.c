@@ -12,6 +12,9 @@ void fan_ecu_init(FanEcuState *state) {
     state->powered        = false;
     state->has_valid_temp = false;
     state->temp           = 0U;
+    state->temp_sent_ms   = 0U;
+    state->temp_judged    = false;
+    state->temp_usable    = false;
     state->temp_request   = FAN_OFF;
     state->output         = FAN_OFF;
 }
@@ -33,6 +36,27 @@ static bool fan_ecu_is_powered(FanEcuContext *ctx) {
     return true;
 }
 
+/* 送信時刻aがbより後ならtrueを返す。uint32_tの引き算は桁あふれをまたいでも経過時間になるため、
+   差が半周（2^31ms、約24.8日）未満なら後とみなす。大小をそのまま比べると、約49.7日で時刻が一周したときに誤る */
+static bool fan_ecu_sent_after(uint32_t a, uint32_t b) {
+    uint32_t diff = a - b;
+    return (diff != 0U) && (diff < 0x80000000U);
+}
+
+/* 水温と、水温センサの確定異常の通知は別のメッセージ・別の周期で届く。水温センサの確定・復帰の前後では、
+   差し替え後の水温（25℃）を確定前の通知（正常）と組み合わせたり、確定中に受け取った25℃を復帰後の通知（正常）と
+   組み合わせたりしうる。そこで、水温1つごとに、それより後に送られた最初の警告灯データで使えるかを1回だけ決める。
+   エンジン監視ECUは確定異常の判定を水温の送信より先に行うので、水温より後に送られた警告灯データは、
+   その水温が差し替え後かどうかを必ず反映している */
+static void fan_ecu_judge_temp(FanEcuContext *ctx, const CanFaultStatus *fault) {
+    FanEcuState *st = ctx->state;
+    if (st->has_valid_temp && (!st->temp_judged)
+        && fan_ecu_sent_after(ctx->can_monitor->last_seen_timestamp_ms[CAN_MSG_FAULT_STATUS], st->temp_sent_ms)) {
+        st->temp_judged = true;
+        st->temp_usable = !fault->fault_temp;
+    }
+}
+
 /* 理由ごとの要求をまとめてファン出力を決め、変わった瞬間だけログを出す。
    受信途絶・水温センサの確定異常の間は、受け取った水温が使えない（古い、またはフェイルセーフ値に
    差し替わっている）ため強制ONにし、水温による要求は更新せずに保つ。強制ONの影響を、解除後の
@@ -46,7 +70,10 @@ static void fan_ecu_decide(FanEcuContext *ctx, CanLinkState fault_link, const Ca
     } else if (fault->fault_temp) {
         reason = "temp sensor fault";
     } else if (st->has_valid_temp) {
-        st->temp_request = fan_ctrl_decide(st->temp, st->temp_request);
+        /* 使えると決まった水温でだけ要求を更新する。まだ決まっていない・使えない水温なら、前の要求を保つ */
+        if (st->temp_judged && st->temp_usable) {
+            st->temp_request = fan_ctrl_decide(st->temp, st->temp_request);
+        }
         if (st->temp_request == FAN_ON) {
             reason = "temp";
         }
@@ -79,6 +106,7 @@ void fan_ecu_receive_fault_status(FanEcuContext *ctx) {
                           (state == CAN_LINK_LOST) ? "FaultStatus link lost" : "FaultStatus link recovered");
     }
     can_diag_check(ctx->can_dtc, CAN_MSG_FAULT_STATUS, previous, state);
+    fan_ecu_judge_temp(ctx, &status);
     fan_ecu_decide(ctx, state, &status);
 }
 
@@ -101,6 +129,8 @@ void fan_ecu_receive_engine_status(FanEcuContext *ctx) {
     if (is_new && (state == CAN_LINK_OK)) {
         ctx->state->temp           = status.temperature;
         ctx->state->has_valid_temp = true;
+        ctx->state->temp_sent_ms   = ctx->can_monitor->last_seen_timestamp_ms[CAN_MSG_ENGINE_STATUS];
+        ctx->state->temp_judged    = false;
     }
 }
 

@@ -10,6 +10,11 @@
    桁あふれするが、本プロジェクトの実行時間では問題にならない */
 uint32_t timer_get_elapsed_ms(void);
 
+/* ms ミリ秒待つ。実時間のビルドでは実際に待ち、検証用のビルドでは仮想時間を進めるだけで待たない。
+   timer_get_elapsed_msと合わせて、src/timer_clock.c（実時間）とsim/timer_clock_virtual.c（仮想時間）
+   のどちらか一方をリンクする */
+void timer_wait_ms(uint32_t ms);
+
 /* 周期判定用のタイマー。最後に周期が来たと判定した時刻と、周期の長さを持つ */
 typedef struct {
     uint32_t period_ms;

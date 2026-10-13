@@ -22,9 +22,15 @@ TEST_CFLAGS_COV = $(TEST_CFLAGS) --coverage
 # モジュールを追加したときはここに追記する
 # ECU_SRCS: ECU本体（src/）、SIM_SRCS: PC上の検証専用（sim/、固定値注入・CAN Fault Injection、Phase25）。
 # sensor_simは両方を合わせてビルドする。main.cがsim/の関数を直接呼んでいるため、現状はsim/を外すとビルドできない
-ECU_SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/validate.c src/faultmgr.c src/timer.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c src/meter.c src/fan_ecu.c src/fan_ctrl.c
+ECU_SRCS = src/main.c src/sensor.c src/stats.c src/alert.c src/status.c src/diag.c src/logger.c src/ignition.c src/persist.c src/cmd.c src/config.c src/validate.c src/faultmgr.c src/timer.c src/timer_clock.c src/scheduler.c src/debounce.c src/can.c src/dtc_status.c src/can_diag.c src/meter.c src/fan_ecu.c src/fan_ctrl.c
 SIM_SRCS = sim/fixture.c sim/can_fault.c
 SRCS = $(ECU_SRCS) $(SIM_SRCS)
+
+# 時間を仮想化した検証用のビルド。実時間の時計と待機（src/timer_clock.c）だけを、仮想時計
+# （sim/timer_clock_virtual.c）に差し替える。それ以外のソースはsensor_simと同じ。
+# 実際には待たないため約20秒かからず終わり、同じ入力なら出力が毎回同じになる
+VIRTUAL_SRCS = $(filter-out src/timer_clock.c,$(ECU_SRCS)) $(SIM_SRCS) sim/timer_clock_virtual.c
+VIRTUAL_TARGET = sensor_sim_virtual
 
 # 全ビルドルールの依存関係に加えるヘッダファイル（Phase26）。.cだけを依存関係にしていると、
 # .hだけを変えたときに古い実行ファイルのまま動いてしまう。どの.hがどの.cに読まれるかは区別せず、
@@ -87,12 +93,12 @@ TEST_FAULTMGR_TARGET = test_faultmgr
 
 # timer.c の動作確認用テスト（経過時間の単調増加、周期判定の境界、main.c は使わない）
 # timer.cは他モジュールに依存しないため、timer.cのみで足りる
-TEST_TIMER_SRCS = test/test_timer.c src/timer.c $(UNITY_DIR)/unity.c
+TEST_TIMER_SRCS = test/test_timer.c src/timer.c src/timer_clock.c $(UNITY_DIR)/unity.c
 TEST_TIMER_TARGET = test_timer
 
 # scheduler.c の動作確認用テスト（タスク登録・初回即時実行・周期判定の確認、main.c は使わない）
 # scheduler.cはtimer.cに依存するため、timer.cも含める
-TEST_SCHEDULER_SRCS = test/test_scheduler.c src/scheduler.c src/timer.c $(UNITY_DIR)/unity.c
+TEST_SCHEDULER_SRCS = test/test_scheduler.c src/scheduler.c src/timer.c src/timer_clock.c $(UNITY_DIR)/unity.c
 TEST_SCHEDULER_TARGET = test_scheduler
 
 # debounce.c の動作確認用テスト（Debounce/Recoveryの連続回数カウントの確認、main.c は使わない）
@@ -103,7 +109,7 @@ TEST_DEBOUNCE_TARGET = test_debounce
 # can.c の動作確認用テスト（フレーム送受信の往復一致、Timeout/Invalid Dataの確定・復帰の確認、main.c は使わない）
 # can.cはfaultmgr.c（送信データの組み立て元）・validate.c（Invalid Data判定）・timer.c（timestamp）・
 # debounce.c（Timeout/Invalid Dataの確定・復帰）に依存する（Phase20）
-TEST_CAN_SRCS = test/test_can.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_SRCS = test/test_can.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_TARGET = test_can
 
 # dtc_status.c の動作確認用テスト（発生回数・状態区分(NONE/ACTIVE/HISTORY)の更新確認、main.c は使わない）
@@ -119,7 +125,7 @@ TEST_CAN_DIAG_TARGET = test_can_diag
 # can_fault.c の動作確認用テスト（Drop判定・can_fault.txtのファイルパース確認、main.c は使わない）
 # can_fault.cはcan.c（ラップ対象の送信関数）・faultmgr.c（警告灯データの送信元）・debounce.c/validate.c
 # （can.cが依存）・timer.c（can.cのtimestamp取得）に依存する（Phase22）
-TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_FAULT_TARGET = test_can_fault
 
 # fan_ctrl.c の動作確認用テスト（水温によるファン要求のヒステリシス判定、main.c は使わない）
@@ -130,7 +136,7 @@ TEST_FAN_CTRL_TARGET = test_fan_ctrl
 # fan_ecu.c の動作確認用テスト（ファン出力の判断・要求のまとめ・イグニッションOFF→ONのリセット、main.c は使わない）
 # busにフレームを直接書いて受信させるため、実際の待機は伴わない。受信はcan.c（validate.c・debounce.cに依存、
 # timer.cは送信関数が使う）、記録はcan_diag.c（dtc_status.cに依存）、判断はfan_ctrl.cを使う（Phase26）
-TEST_FAN_ECU_SRCS = test/test_fan_ecu.c src/fan_ecu.c src/fan_ctrl.c src/can.c src/can_diag.c src/dtc_status.c src/debounce.c src/validate.c src/timer.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_FAN_ECU_SRCS = test/test_fan_ecu.c src/fan_ecu.c src/fan_ctrl.c src/can.c src/can_diag.c src/dtc_status.c src/debounce.c src/validate.c src/timer.c src/timer_clock.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_FAN_ECU_TARGET = test_fan_ecu
 
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
@@ -145,6 +151,10 @@ all: $(TARGET)
 # 実行ファイルのビルドルール
 $(TARGET): $(SRCS) $(HEADERS)
 	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET)
+
+# 時間を仮想化した検証用のビルドルール（VIRTUAL_SRCSの説明参照）
+$(VIRTUAL_TARGET): $(VIRTUAL_SRCS) $(HEADERS)
+	$(CC) $(CFLAGS) $(VIRTUAL_SRCS) -o $(VIRTUAL_TARGET)
 
 # テスト用実行ファイルのビルドルール（Unity(vendor/unity/)を使うためTEST_CFLAGSを使う。Phase13）
 $(TEST_DIAG_TARGET): $(TEST_DIAG_SRCS) $(HEADERS)
@@ -313,5 +323,5 @@ scenario: $(TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET)
+	rm -f $(TARGET) $(VIRTUAL_TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET)
 	rm -f *_cov *.gcno *.gcda *.gcov

@@ -213,6 +213,57 @@ static void test_send_after_ignition_cycle(void) {
     TEST_ASSERT_FALSE_MESSAGE(fan_on, "ON直後は受信より先でもOFFを送る");
 }
 
+/* 警告灯データ（bitsはCAN_FAULT_BIT_*の組み合わせ）を新しいフレームとして書くだけで、受信させない。
+   送られたがファン制御ECUがまだ受信していない状態を作るために使う */
+static void write_fault(uint8_t bits) {
+    CanFrame *f = &bus.frames[CAN_MSG_FAULT_STATUS];
+    f->id      = CAN_ID_FAULT_STATUS;
+    f->dlc     = 1U;
+    f->data[0] = bits;
+    f->timestamp_ms = now_ms++;
+    f->valid   = true;
+}
+
+/* 水温センサの確定の瞬間：確定の前に送られた警告灯データ（正常）を、確定の後に送られた水温（25℃）より
+   後に受信しても、25℃では判断しない（Day58。タスクの開始がずれると、実際にこの順番になる） */
+static void test_no_off_at_fault_confirmation(void) {
+    receive_engine(95U);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: 95℃でON");
+    write_fault(0U);                      /* 確定の前に送られた警告灯データ */
+    receive_engine(25U);                  /* 確定の後に送られた、差し替え後の水温 */
+    fan_ecu_receive_fault_status(&ctx);   /* 確定の前の警告灯データで判断する */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "確定前の通知と差し替え後の水温の組み合わせでOFFにしない");
+    receive_fault(CAN_FAULT_BIT_TEMP);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "確定の通知を受けてもONのまま");
+}
+
+/* 水温センサの復帰の瞬間：実際の並びでは、復帰後の警告灯データ（正常）を、復帰後の水温より先に受信する。
+   確定中に受け取った25℃では判断せず、故障前の要求（ON）を保つ（Day58。タスクの開始がずれていなくても、
+   この順番になる。test_temp_request_kept_during_faultは水温→警告灯データの順で、この並びを通らない） */
+static void test_no_off_at_fault_recovery(void) {
+    receive_engine(95U);
+    receive_fault(0U);
+    receive_engine(25U);
+    receive_fault(CAN_FAULT_BIT_TEMP);
+    receive_fault(0U);                    /* 復帰後の警告灯データ。手元の水温はまだ確定中の25℃ */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "復帰直後に確定中の25℃でOFFにしない");
+    receive_engine(FAN_OFF_TEMP + 1U);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "復帰後の閾値の間の水温ではONのまま");
+}
+
+/* 送信時刻が一周（2^32ms）をまたいでも、水温より後に送られた警告灯データを正しく見分ける */
+static void test_judge_across_timestamp_wrap(void) {
+    now_ms = 0xFFFFFFFDU;
+    receive_engine(FAN_ON_TEMP);          /* 送信時刻 0xFFFFFFFD */
+    receive_fault(0U);                    /* 0xFFFFFFFE */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: ON閾値でON");
+    receive_engine(FAN_OFF_TEMP);         /* 0xFFFFFFFF */
+    receive_fault(0U);                    /* 一周して0 */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "一周した後の警告灯データでも、OFF閾値の水温を使えると決める");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -228,6 +279,9 @@ int main(void) {
     RUN_TEST(test_send_value_follows_output);
     RUN_TEST(test_send_value_during_forced_on);
     RUN_TEST(test_send_after_ignition_cycle);
+    RUN_TEST(test_no_off_at_fault_confirmation);
+    RUN_TEST(test_no_off_at_fault_recovery);
+    RUN_TEST(test_judge_across_timestamp_wrap);
 
     return UNITY_END();
 }

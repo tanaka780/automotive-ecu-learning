@@ -15,6 +15,9 @@ typedef struct {
     bool     powered;          /* 前回呼ばれたときにイグニッションONだったか（OFF→ONの検出用） */
     bool     has_valid_temp;   /* ONの後に、新しく届いた水温を受け取ったか */
     uint8_t  temp;             /* 最後に受け取った水温 [℃] */
+    uint32_t temp_sent_ms;     /* その水温の送信時刻 */
+    bool     temp_judged;      /* その水温より後に送られた警告灯データで、使えるかを決めたか */
+    bool     temp_usable;      /* 決めた結果。その警告灯データで水温センサが正常ならtrue */
     FanState temp_request;     /* 水温による要求（fan_ctrl_decideに渡す前回の要求） */
     FanState output;           /* 要求をまとめた後のファン出力 */
 } FanEcuState;

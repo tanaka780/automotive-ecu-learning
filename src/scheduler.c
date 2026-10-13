@@ -1,9 +1,4 @@
-/* -std=c11だけではnanosleep()が見えないため、POSIX機能テストマクロをヘッダより前に定義する
-   （src/timer.cのclock_gettimeと理由は同じ） */
-#define _POSIX_C_SOURCE 200809L
-
 #include "scheduler.h"
-#include <time.h>   /* nanosleep() */
 
 /* タスクの周期判定をポーリングする間隔 [ms]。以前main.cが直接持っていたポーリング間隔と
    同じ値をここに集約する */
@@ -31,8 +26,6 @@ bool scheduler_add_task(Scheduler *sched, SchedulerTaskFunc func, void *context,
 
 /* 登録済みタスクのいずれかの周期が来るまで待ち、その時点で周期が来ている全タスクを実行する */
 void scheduler_run_due(Scheduler *sched) {
-    struct timespec poll_interval = { .tv_sec = 0, .tv_nsec = (long)SCHEDULER_POLL_INTERVAL_MS * 1000000L };
-
     bool executed = false;
     while (!executed) {
         for (uint8_t i = 0U; i < sched->task_count; i++) {
@@ -56,7 +49,8 @@ void scheduler_run_due(Scheduler *sched) {
         }
 
         if (!executed) {
-            (void)nanosleep(&poll_interval, NULL);
+            /* 待ち方（実際に待つか、仮想時間を進めるか）はtimer_clockの実装に任せる */
+            timer_wait_ms(SCHEDULER_POLL_INTERVAL_MS);
         }
     }
 }

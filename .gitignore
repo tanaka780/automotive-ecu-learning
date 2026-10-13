@@ -1,4 +1,5 @@
 sensor_sim
+sensor_sim_virtual
 *.o
 .claude/
 test_diag
