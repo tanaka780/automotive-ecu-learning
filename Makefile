@@ -317,8 +317,9 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_FAN_ECU_TARGET)
 
 # シナリオ検証ターゲット（Phase25）: sensor_simをPythonから実行し、docs/scenarios.mdの期待結果と照合する。
-# 1条件につきsensor_simを最後まで動かす（約20秒）ため、make testには含めず別ターゲットにしている
-scenario: $(TARGET)
+# 1条件につきsensor_simを最後まで動かす（約20秒）ため、make testには含めず別ターゲットにしている。
+# 冷却ファンのシナリオ（test_fan_control.py）は、秒単位で照合するため仮想時間版を使う
+scenario: $(TARGET) $(VIRTUAL_TARGET)
 	python3 -m unittest discover -s scenario_test -v
 
 # クリーンターゲット: make clean で生成ファイルを削除する

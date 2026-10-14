@@ -40,6 +40,7 @@ typedef struct {
     bool              ignition_fixed;        /* fixture.txtのIGNITIONで固定する場合true（Phase25） */
     IgnitionState     ignition_fixed_state;  /* ignition_fixedがtrueのときに使う状態 */
     bool              fixture_fixed;
+    const FixtureTempSteps *temp_steps;      /* fixture.txtのTEMP@N行（途中で変える水温）。fixture_fixedのときだけ使う */
     VehicleSensorData *sensor_data;
     const ConfigData  *config;
     SensorStatus      *sensor_status;
@@ -92,6 +93,9 @@ static void run_sample_cycle(void *context) {
     if (ctx->ignition->current == IGNITION_ON) {
         if (!ctx->fixture_fixed) {
             sensor_update(ctx->sensor_data);              /* 固定値注入が無ければセンサ値を更新する (書く) */
+        } else {
+            /* TEMP@N行があれば、このサンプルで使う水温に差し替える。当てはまる行が無ければTEMP=の値のまま */
+            (void)fixture_temp_at(ctx->temp_steps, ctx->sample_index, &ctx->sensor_data->temperature);
         }
         sensor_print(ctx->sensor_data);                   /* センサ値を表示する (読む) */
         status_check(ctx->sensor_status, ctx->sensor_data, ctx->config); /* 状態レベルを判定する */
@@ -168,6 +172,9 @@ int main(void) {
     /* fixture.txtにIGNITION行があればイグニッションも固定する。falseならループ内でignition_updateを使う（Phase25） */
     IgnitionState fixed_ignition = IGNITION_OFF;
     bool ignition_fixed = fixture_load_ignition(&fixed_ignition, FIXTURE_FILENAME);
+    /* fixture.txtにTEMP@N行があれば、N秒目以降の水温を変える。行が無ければcount=0で何も変えない */
+    FixtureTempSteps temp_steps;
+    (void)fixture_load_temp_steps(&temp_steps, FIXTURE_FILENAME);
 
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
@@ -230,6 +237,7 @@ int main(void) {
         .ignition_fixed       = ignition_fixed,
         .ignition_fixed_state = fixed_ignition,
         .fixture_fixed = fixture_fixed,
+        .temp_steps    = &temp_steps,
         .sensor_data   = &sensor_data,
         .config        = &config,
         .sensor_status = &sensor_status,

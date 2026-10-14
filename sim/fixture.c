@@ -138,3 +138,87 @@ bool fixture_load_ignition(IgnitionState *state, const char *filename) {
                       (value == IGNITION_ON) ? "Ignition fixed: ON" : "Ignition fixed: OFF");
     return true;
 }
+
+/* "TEMP@N=値" の1行を解釈し、有効ならfrom_sample・temperatureに入れてtrueを返す。
+   キーは"TEMP@"の直後に整数だけが続くものに限り（%cで余分な文字が残っていないかを見る）、Nは1以上とする。
+   値はTEMP=と同じく、数値に変換できない・値域外なら無視する */
+static bool fixture_temp_step_line(const char *line, int *from_sample, uint8_t *temperature) {
+    char key[FIXTURE_LINE_SIZE];
+    char str_value[FIXTURE_LINE_SIZE];
+    int  n;
+    int  value;
+    char extra;
+
+    if (sscanf(line, "%63[^=]=%63s", key, str_value) != 2) {
+        return false;
+    }
+    if ((sscanf(key, "TEMP@%d%c", &n, &extra) != 1) || (n < 1)) {
+        return false;
+    }
+    if ((sscanf(str_value, "%d", &value) != 1) || (!validate_in_range(SENSOR_TEMP, value))) {
+        return false;
+    }
+
+    *from_sample = n;
+    *temperature = (uint8_t)value;
+    return true;
+}
+
+/* fixture_load_ignitionと同じく、同じファイルをもう一度開いてTEMP@N行だけを読む。
+   fixture_apply・fixture_load_ignitionはTEMP@Nを未知のキーとして無視するため、既存の動作は変わらない */
+bool fixture_load_temp_steps(FixtureTempSteps *steps, const char *filename) {
+    steps->count = 0U;
+
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return false;   /* ファイルが無いことはfixture_applyがログに出しているため、ここでは出さない */
+    }
+
+    char line[FIXTURE_LINE_SIZE];
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        int     from_sample;
+        uint8_t temperature;
+        if (!fixture_temp_step_line(line, &from_sample, &temperature)) {
+            continue;
+        }
+
+        /* 同じNが既にあれば上書きする（後勝ち）。無ければ空きがある間だけ足す */
+        bool replaced = false;
+        for (uint8_t i = 0U; i < steps->count; i++) {
+            if (steps->from_sample[i] == from_sample) {
+                steps->temperature[i] = temperature;
+                replaced = true;
+            }
+        }
+        if ((!replaced) && (steps->count < FIXTURE_TEMP_STEP_MAX)) {
+            steps->from_sample[steps->count] = from_sample;
+            steps->temperature[steps->count] = temperature;
+            steps->count++;
+        }
+    }
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
+
+    if (steps->count == 0U) {
+        return false;
+    }
+
+    char msg[40];   /* "Temp changes loaded: 16" が収まるサイズ */
+    (void)snprintf(msg, sizeof(msg), "Temp changes loaded: %d", (int)steps->count);
+    log_print_leveled(LOG_INFO, "FIXTURE", msg);
+    return true;
+}
+
+/* 行は書かれた順のまま持っているので、sample_index以下のNのうち一番大きいものを探す */
+bool fixture_temp_at(const FixtureTempSteps *steps, int sample_index, uint8_t *temperature) {
+    bool found = false;
+    int  best  = 0;
+    for (uint8_t i = 0U; i < steps->count; i++) {
+        if ((steps->from_sample[i] <= sample_index) && (steps->from_sample[i] > best)) {
+            best         = steps->from_sample[i];
+            *temperature = steps->temperature[i];
+            found        = true;
+        }
+    }
+    return found;
+}

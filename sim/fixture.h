@@ -22,4 +22,26 @@ bool fixture_apply(VehicleSensorData *data, const char *filename);
    （呼び出し側はignition_updateによるランダム動作を使う） */
 bool fixture_load_ignition(IgnitionState *state, const char *filename);
 
+/* TEMP@N=値 の行を覚えておける数。冷却ファンのON/OFFを確かめる流れ（数回の上下）に足りる数にする */
+#define FIXTURE_TEMP_STEP_MAX 16U
+
+/* 実行の途中で水温を変える指定（TEMP@N=値：N秒目のサンプル以降は、その水温にする）。
+   センサ値は1秒に1回しか読まないので、ミリ秒ではなくサンプル番号で指定する。
+   実時間版・仮想時間版のどちらでも、同じサンプルで同じ値になる */
+typedef struct {
+    uint8_t count;
+    int     from_sample[FIXTURE_TEMP_STEP_MAX];   /* N（1始まりのサンプル番号） */
+    uint8_t temperature[FIXTURE_TEMP_STEP_MAX];   /* その水温 [℃] */
+} FixtureTempSteps;
+
+/* 指定したファイルからTEMP@N=値の行だけを読み込み、stepsに入れる（MODEの値には関係しない。
+   固定値を使うかどうかはfixture_applyの戻り値で呼び出し側が決める）。
+   Nが1以上の整数でない行・値域外の値の行は無視する。同じNが2回あれば後に書かれた値を使う。
+   FIXTURE_TEMP_STEP_MAXを超えた分は無視する。ファイルが無い場合・行が無い場合はcount=0にしてfalseを返す */
+bool fixture_load_temp_steps(FixtureTempSteps *steps, const char *filename);
+
+/* sample_indexのサンプルで使う水温をtemperatureに入れてtrueを返す。sample_index以下で一番大きいNの値を使う。
+   当てはまる行が無ければtemperatureを変更せずfalseを返す（呼び出し側はTEMP=の値をそのまま使う） */
+bool fixture_temp_at(const FixtureTempSteps *steps, int sample_index, uint8_t *temperature);
+
 #endif /* FIXTURE_H */

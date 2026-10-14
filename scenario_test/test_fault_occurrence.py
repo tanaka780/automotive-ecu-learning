@@ -3,9 +3,10 @@
 fixture.txtでセンサ値とイグニッション（ON）を固定し、sensor_simを外から実行して期待結果と照合する。
 `make scenario`で実行する。1条件につきsensor_simを最後まで1回動かすため、約20秒×条件数かかる。
 
-fixture.txtは1回の実行中ずっと同じ値しか出せないため、1サンプル目から最後までCRITICALが続く形でしか
-再現できない。シナリオの流れのうち「正常範囲で数回更新される」「正常範囲に戻る」「Ignition OFF」と、
-期待結果のうち「NORMALが3回連続するとRecovered」は対象外（Degraded確定までを検証する）。
+このテストでは値を最後まで固定し、1サンプル目から最後までCRITICALが続く形で再現する。シナリオの流れのうち
+「正常範囲で数回更新される」「正常範囲に戻る」「Ignition OFF」と、期待結果のうち「NORMALが3回連続すると
+Recovered」は対象外（Degraded確定までを検証する）。水温だけは、fixture.txtのTEMP@N行で途中の値を変えられる
+ようになり、水温のRecoveredはtest_fan_control.pyで確認している。
 
 test_meter_shows_failsafe_value_and_fault_bitとtest_only_faulty_sensors_use_failsafe_valuesは、
 メーターECU役の表示（[METER]の行）を照合している。Phase25ではメーター表示を対象外としているが、
