@@ -44,4 +44,24 @@ bool fixture_load_temp_steps(FixtureTempSteps *steps, const char *filename);
    当てはまる行が無ければtemperatureを変更せずfalseを返す（呼び出し側はTEMP=の値をそのまま使う） */
 bool fixture_temp_at(const FixtureTempSteps *steps, int sample_index, uint8_t *temperature);
 
+/* IGNITION@N=ON/OFF の行を覚えておける数 */
+#define FIXTURE_IGNITION_STEP_MAX 16U
+
+/* 実行の途中でイグニッションを切り替える指定（IGNITION@N=ON/OFF：N秒目のサンプル以降は、その状態にする）。
+   決め方はTEMP@Nと同じ。エンジンを切っている間の動きと、かけ直したときの動きを、決まった秒で再現するため */
+typedef struct {
+    uint8_t       count;
+    int           from_sample[FIXTURE_IGNITION_STEP_MAX];   /* N（1始まりのサンプル番号） */
+    IgnitionState state[FIXTURE_IGNITION_STEP_MAX];
+} FixtureIgnitionSteps;
+
+/* 指定したファイルからIGNITION@N=ON/OFFの行だけを読み込み、stepsに入れる。
+   使うのはIGNITION=の行でイグニッションを固定したとき（fixture_load_ignitionがtrueのとき）だけで、
+   固定しないランダム動作には混ぜない。不正な行の扱い・後勝ち・上限はTEMP@Nと同じ */
+bool fixture_load_ignition_steps(FixtureIgnitionSteps *steps, const char *filename);
+
+/* sample_indexのサンプルで使うイグニッションの状態をstateに入れてtrueを返す。決め方はfixture_temp_atと同じ。
+   当てはまる行が無ければstateを変更せずfalseを返す（呼び出し側はIGNITION=の状態をそのまま使う） */
+bool fixture_ignition_at(const FixtureIgnitionSteps *steps, int sample_index, IgnitionState *state);
+
 #endif /* FIXTURE_H */

@@ -222,3 +222,88 @@ bool fixture_temp_at(const FixtureTempSteps *steps, int sample_index, uint8_t *t
     }
     return found;
 }
+
+/* "IGNITION@N=ON/OFF" の1行を解釈し、有効ならfrom_sample・stateに入れてtrueを返す。
+   キーの決め方はTEMP@Nと同じ。値はIGNITION=と同じく、ON/OFFを厳密に比べる */
+static bool fixture_ignition_step_line(const char *line, int *from_sample, IgnitionState *state) {
+    char key[FIXTURE_LINE_SIZE];
+    char str_value[FIXTURE_LINE_SIZE];
+    int  n;
+    char extra;
+
+    if (sscanf(line, "%63[^=]=%63s", key, str_value) != 2) {
+        return false;
+    }
+    if ((sscanf(key, "IGNITION@%d%c", &n, &extra) != 1) || (n < 1)) {
+        return false;
+    }
+    if (strcmp(str_value, "ON") == 0) {
+        *state = IGNITION_ON;
+    } else if (strcmp(str_value, "OFF") == 0) {
+        *state = IGNITION_OFF;
+    } else {
+        return false;
+    }
+
+    *from_sample = n;
+    return true;
+}
+
+/* TEMP@Nと同じく、同じファイルをもう一度開いてIGNITION@N行だけを読む。
+   fixture_load_ignitionは"IGNITION"と完全に一致するキーしか読まないため、IGNITION@Nの行に影響されない。
+   読み込みと後勝ちの処理はfixture_load_temp_stepsと同じ形だが、使う場所が2か所のうちは共通化しない */
+bool fixture_load_ignition_steps(FixtureIgnitionSteps *steps, const char *filename) {
+    steps->count = 0U;
+
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return false;   /* ファイルが無いことはfixture_applyがログに出しているため、ここでは出さない */
+    }
+
+    char line[FIXTURE_LINE_SIZE];
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        int           from_sample;
+        IgnitionState state;
+        if (!fixture_ignition_step_line(line, &from_sample, &state)) {
+            continue;
+        }
+
+        bool replaced = false;
+        for (uint8_t i = 0U; i < steps->count; i++) {
+            if (steps->from_sample[i] == from_sample) {
+                steps->state[i] = state;
+                replaced = true;
+            }
+        }
+        if ((!replaced) && (steps->count < FIXTURE_IGNITION_STEP_MAX)) {
+            steps->from_sample[steps->count] = from_sample;
+            steps->state[steps->count]       = state;
+            steps->count++;
+        }
+    }
+    /* 読み込みモードのfcloseのため、失敗しても既読データの正しさに影響しない。戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)fclose(fp);
+
+    if (steps->count == 0U) {
+        return false;
+    }
+
+    char msg[40];   /* "Ignition changes loaded: 16" が収まるサイズ */
+    (void)snprintf(msg, sizeof(msg), "Ignition changes loaded: %d", (int)steps->count);
+    log_print_leveled(LOG_INFO, "FIXTURE", msg);
+    return true;
+}
+
+/* 決め方はfixture_temp_atと同じ */
+bool fixture_ignition_at(const FixtureIgnitionSteps *steps, int sample_index, IgnitionState *state) {
+    bool found = false;
+    int  best  = 0;
+    for (uint8_t i = 0U; i < steps->count; i++) {
+        if ((steps->from_sample[i] <= sample_index) && (steps->from_sample[i] > best)) {
+            best   = steps->from_sample[i];
+            *state = steps->state[i];
+            found  = true;
+        }
+    }
+    return found;
+}

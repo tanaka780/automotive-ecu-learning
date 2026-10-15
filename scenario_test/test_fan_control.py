@@ -156,5 +156,56 @@ class FanSensorFaultTest(unittest.TestCase):
                 self.assertIn("NONE", line)
 
 
+# 85℃のまま、5秒目にエンジンを切り、8秒目にかけ直す（IGNITION@N行）
+ENGINE_RESTART_FIXTURE = (
+    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=85\n"
+    "IGNITION=ON\nIGNITION@5=OFF\nIGNITION@8=ON\n"
+)
+
+
+class EngineRestartTest(unittest.TestCase):
+    """エンジンを切っている間は何もせず、かけ直すとファン係は判断をやり直す。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result = run_sensor_sim({"fixture.txt": ENGINE_RESTART_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.lines = cls.result.stdout.splitlines()
+        cls.samples = split_samples(cls.lines)
+        cls.events = fan_events(cls.samples)
+
+    def test_runs_to_the_end(self):
+        """前提：20サンプル最後まで実行され、終了コードは0"""
+        self.assertEqual(0, self.result.returncode)
+        self.assertEqual(list(range(1, 21)), sorted(self.samples))
+
+    def test_ignition_switches_at_given_samples(self):
+        """IGNITION@N行どおりに、5〜7秒目だけエンジンが切れる"""
+        expected = ["ON"] * 4 + ["OFF"] * 3 + ["ON"] * 13
+        actual = ["ON" if "[IGN] ON" in self.samples[n] else "OFF" for n in range(1, 21)]
+        self.assertEqual(expected, actual)
+
+    def test_nothing_happens_while_engine_off(self):
+        """エンジンを切っている間は、メーターの表示もファンの判断も出ない"""
+        for n in (5, 6, 7):
+            self.assertFalse([l for l in self.samples[n] if l.startswith("[METER]") or l.startswith("[FAN]")])
+
+    def test_fan_decides_again_after_restart(self):
+        """1秒目にONになり、かけ直した8秒目にも判断をやり直してONになる
+        （エンジンを切ったときに止まるのはログを出さないので、[FAN] Fan OFFの行は出ない）"""
+        self.assertEqual({1: "[FAN] Fan ON (temp)", 8: "[FAN] Fan ON (temp)"}, self.events)
+
+    def test_meter_shows_off_right_after_restart(self):
+        """かけ直した直後の8秒目は、判断をやり直したばかりなのでメーターにはOFFが届き、9秒目からON"""
+        expected = [0, 1, 1, 1, None, None, None, 0] + [1] * 12
+        actual = [meter_value(self.samples, n, "FanStatus", "fan") for n in range(1, 21)]
+        self.assertEqual(expected, actual)
+
+    def test_no_link_lost(self):
+        """前提：エンジンを切っている間に連絡が届かなくても、通信の途絶としては記録しない"""
+        for line in self.lines:
+            if line.startswith("[FAN-DTC]") or line.startswith("[CAN-DTC]"):
+                self.assertIn("NONE", line)
+
+
 if __name__ == "__main__":
     unittest.main()

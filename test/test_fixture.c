@@ -281,6 +281,89 @@ static void test_temp_steps_do_not_change_apply(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "IGNITIONの読み込みに影響しない");
 }
 
+/* IGNITION@N行：N秒目より前は当てはまらず、N秒目以降は一番大きいNの状態になることを確認する（行の順番にはよらない） */
+static void test_ignition_steps_switch_by_sample(void) {
+    write_raw(TEST_FIXTURE_FILENAME,
+        "IGNITION=ON\n"
+        "IGNITION@8=ON\n"
+        "IGNITION@5=OFF\n");
+    FixtureIgnitionSteps steps;
+    TEST_ASSERT_TRUE_MESSAGE(fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME), "IGNITION@N行あり: 戻り値はtrue");
+    TEST_ASSERT_EQUAL_MESSAGE(2, steps.count, "IGNITION@N行あり: 2行読み込む");
+
+    IgnitionState state = IGNITION_ON;
+    TEST_ASSERT_FALSE_MESSAGE(fixture_ignition_at(&steps, 4, &state), "4秒目: 当てはまる行は無い");
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "4秒目: 状態は変えない");
+    TEST_ASSERT_TRUE(fixture_ignition_at(&steps, 5, &state));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_OFF, "5秒目: IGNITION@5の状態(OFF)");
+    TEST_ASSERT_TRUE(fixture_ignition_at(&steps, 7, &state));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_OFF, "7秒目: IGNITION@5の状態(OFF)のまま");
+    TEST_ASSERT_TRUE(fixture_ignition_at(&steps, 8, &state));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "8秒目: 先に書かれたIGNITION@8の状態(ON)");
+}
+
+/* Nが1以上の整数でない行、ON/OFF以外の値の行は無視し、同じNは後に書かれた状態を使うことを確認する */
+static void test_ignition_steps_invalid_and_duplicate(void) {
+    write_raw(TEST_FIXTURE_FILENAME,
+        "IGNITION@0=OFF\n"
+        "IGNITION@x=OFF\n"
+        "IGNITION@3a=OFF\n"
+        "IGNITION@3=off\n"
+        "IGNITION@3=1\n"
+        "IGNITION@3=\n");
+    FixtureIgnitionSteps steps;
+    TEST_ASSERT_FALSE_MESSAGE(fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME), "不正な行のみ: 戻り値はfalse");
+    TEST_ASSERT_EQUAL_MESSAGE(0, steps.count, "不正な行のみ: 1行も読み込まない");
+
+    write_raw(TEST_FIXTURE_FILENAME, "IGNITION@3=OFF\nIGNITION@3=ON\n");
+    (void)fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME);
+    TEST_ASSERT_EQUAL_MESSAGE(1, steps.count, "同じNは1行として持つ");
+    IgnitionState state = IGNITION_OFF;
+    TEST_ASSERT_TRUE(fixture_ignition_at(&steps, 3, &state));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "後に書かれた状態(ON)を使う");
+}
+
+/* IGNITION@N行が無い場合・ファイルが無い場合はfalseを返し、count=0にすることを確認する */
+static void test_ignition_steps_absent(void) {
+    FixtureIgnitionSteps steps;
+    write_raw(TEST_FIXTURE_FILENAME, "MODE=FIXED\nIGNITION=ON\n");
+    TEST_ASSERT_FALSE_MESSAGE(fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME), "IGNITION@N行なし: 戻り値はfalse");
+    TEST_ASSERT_EQUAL_MESSAGE(0, steps.count, "IGNITION@N行なし: count=0");
+
+    remove(TEST_FIXTURE_FILENAME);
+    TEST_ASSERT_FALSE_MESSAGE(fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME), "ファイルなし: 戻り値はfalse");
+    TEST_ASSERT_EQUAL_MESSAGE(0, steps.count, "ファイルなし: count=0");
+}
+
+/* FIXTURE_IGNITION_STEP_MAXを超えた行は無視することを確認する */
+static void test_ignition_steps_max(void) {
+    char text[512] = "";
+    for (int n = 1; n <= (int)FIXTURE_IGNITION_STEP_MAX + 1; n++) {
+        char line[32];
+        (void)snprintf(line, sizeof(line), "IGNITION@%d=%s\n", n, (n % 2 == 0) ? "ON" : "OFF");
+        strcat(text, line);
+    }
+    write_raw(TEST_FIXTURE_FILENAME, text);
+    FixtureIgnitionSteps steps;
+    (void)fixture_load_ignition_steps(&steps, TEST_FIXTURE_FILENAME);
+    TEST_ASSERT_EQUAL_MESSAGE(FIXTURE_IGNITION_STEP_MAX, steps.count, "上限までだけ読み込む");
+    IgnitionState state = IGNITION_OFF;
+    TEST_ASSERT_TRUE(fixture_ignition_at(&steps, (int)FIXTURE_IGNITION_STEP_MAX + 1, &state));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "上限を超えた行(N=17、OFF)は無視し、N=16の状態(ON)を使う");
+}
+
+/* IGNITION@N行があっても、fixture_load_ignition・fixture_applyの結果は変わらないことを確認する */
+static void test_ignition_steps_do_not_change_others(void) {
+    write_raw(TEST_FIXTURE_FILENAME, "MODE=FIXED\nTEMP=70\nIGNITION=ON\nIGNITION@2=OFF\n");
+    IgnitionState state = IGNITION_OFF;
+    TEST_ASSERT_TRUE(fixture_load_ignition(&state, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "fixture_load_ignitionはIGNITION=の状態(ON)を使い、IGNITION@Nは無視する");
+    VehicleSensorData data;
+    sensor_init(&data);
+    TEST_ASSERT_TRUE(fixture_apply(&data, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_EQUAL_MESSAGE(70, data.temperature, "fixture_applyの結果に影響しない");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -301,6 +384,11 @@ int main(void) {
     RUN_TEST(test_temp_steps_absent);
     RUN_TEST(test_temp_steps_max);
     RUN_TEST(test_temp_steps_do_not_change_apply);
+    RUN_TEST(test_ignition_steps_switch_by_sample);
+    RUN_TEST(test_ignition_steps_invalid_and_duplicate);
+    RUN_TEST(test_ignition_steps_absent);
+    RUN_TEST(test_ignition_steps_max);
+    RUN_TEST(test_ignition_steps_do_not_change_others);
 
     int result = UNITY_END();
     remove(TEST_FIXTURE_FILENAME);   /* テスト専用ファイルの後片付け */

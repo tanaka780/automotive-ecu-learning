@@ -6,16 +6,22 @@
 
 ## このプログラムについて
 
-車の中にある3つのコンピュータ（エンジンの見張り役・冷却ファン係・メーター）の動きを、
-C言語でパソコン上に再現したプログラムです。温度などを1秒ごとに確かめ、異常を見つけると記録し、
-異常があっても安全側に動き続けます。
+車の中にある3つのコンピュータ（エンジンの見張り役・ファン係・メーター）の動きを、
+C言語でパソコン上に再現したプログラム。エンジンの見張り役は温度などを1秒ごとに確かめ、異常を見つけると記録する。
+ファン係は熱ければ冷却ファンを回し、メーターは運転席に表示する。3つは車の中の通信線（CAN）でやり取りし、
+異常があっても安全側に動き続ける。
 
-![プログラムの構成](docs/images/program_overview.svg)
+![再生画面：通信の途切れ（10秒目）](docs/images/viewer_comm_example.png)
 
-### 実際に動かした結果
+実際に動かした結果を1秒ずつ再生する画面。再生画面で見られる16通りのうち「通信の途切れ」を再生している途中（10秒目）で、
+エンジンの見張り役からの連絡が、ファン係とメーターに届かなくなっている。
+ファン係は本当の温度が分からないので安全のためファンを回し、メーターは最後に届いた値を表示している。
 
-温度が上がるとファンを回し、温度センサーの異常を見つけても、安全のためファンを回し続けます。
-センサーが元に戻り、温度が下がってからファンを止めます。
+### 実際に動かした結果の例：温度センサーの異常（20秒間の流れ）
+
+16通りのうち「温度センサーの異常」の20秒間を、1枚の図にしたもの。温度が上がるとファンを回し、
+温度センサーの異常を見つけても、安全のためファンを回し続ける。センサーが元に戻り、温度が下がってからファンを止める。
+ほかの対応は、下の「できること」の表と再生画面で見られる。
 
 ![実際に動かした結果](docs/images/fan_run_example.svg)
 
@@ -40,18 +46,21 @@ C言語でパソコン上に再現したプログラムです。温度などを1
 | | エンジンを切っている間 | 何もしない。かけ直すと、ファン係は判断をやり直す |
 | 点検 | 整備工場での点検 | エンジンを切っているときだけ、点検用のコマンドで記録を全部、またはセンサーごとに消せる。おかしな命令は受け付けない |
 
+上の表の16通りは、冒頭の再生画面（[viewer/index.html](viewer/index.html)）で、1秒ずつ再生して見られる。
+リポジトリをダウンロードし、このファイルをブラウザで開く（ファイル1つで動き、インストールは要らない）。
+
 ### 取り組みの量（2026年10月時点）
 
-- 期間：2026年6月〜（約4か月）。作業の記録（日報）59日分
+- 期間：2026年6月〜（約4か月）。作業の記録（日報）60日分
 - 26の段階に分けて、小さく作っては確かめる、を繰り返した
-- C言語のプログラム約3,000行、テストのプログラム約3,500行
-- 8つの車の場面（シナリオ）を決め、上の表の16通りの対応を、自動テストと実際の実行で確かめている
-- 自動テスト194件（部品ごとのテスト149件、全体を通して動かすテスト45件）
+- C言語のプログラム約3,000行、テストのプログラム約3,700行
+- 8つのシナリオ（車の使われ方の筋書き）を決め、上の表の16通りの対応を、自動テストと実際の実行で確かめている
+- 自動テスト205件（部品ごとのテスト154件、全体を通して動かすテスト51件）
 
 ### 工夫したこと
 
 - **わざと故障を起こして確かめる仕組み**：センサーの値を固定する・途中で変える、通信を途中で止める、
-  などを設定ファイルで起こせるようにし、故障したときの動きを毎回同じ条件で確かめられるようにした
+  エンジンを途中で切る・かけ直す、などを設定ファイルで起こせるようにし、故障したときの動きを毎回同じ条件で確かめられるようにした
 - **時間を自由に進めるテストの仕組み**：20秒かかる動作確認を数ミリ秒で、毎回まったく同じ結果で
   動かせるようにした。これにより、普段のテストでは見つからなかった
   「タイミングによって冷却ファンが止まってしまう不具合」を2つ見つけて直した
@@ -98,7 +107,7 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 | [docs/learning_journal.md](docs/learning_journal.md) | 学んだことの理解メモ |
 | [docs/daily_log/](docs/daily_log/) | 日ごとの作業記録 |
 | [docs/AI_workflow.md](docs/AI_workflow.md) | AI活用方針 |
-| [docs/images/](docs/images/) | このREADMEの図（構成図・実際に動かした結果の図） |
+| [docs/images/](docs/images/) | このREADMEの図（再生画面の画像・実際に動かした結果の図） |
 
 ---
 
@@ -107,7 +116,7 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 - OS: Windows / WSL2 Ubuntu
 - Editor / AI: ChatGPT, Claude
 - Compiler: gcc (`-Wall -Wextra -std=c11`)
-- Python 3（シナリオ検証`make scenario`用。標準ライブラリのみ使用）
+- Python 3（シナリオ検証`make scenario`、READMEの図・再生画面のデータ作成用。標準ライブラリのみ使用）
 
 ---
 
@@ -129,7 +138,7 @@ make test
 make coverage
 ```
 
-シナリオ検証（Phase25。`sensor_sim`をPythonから実行し、[docs/scenarios.md](docs/scenarios.md)の期待結果と照合する。現在は設定ファイル異常時のフェイルセーフ・故障発生（Degraded確定まで）・電源再投入・冷却ファン制御・水温センサ故障時の冷却ファン制御。`sensor_sim`の1回の実行に約20秒かかり、全体で8回実行するため約2分30秒かかる。冷却ファンの2条件は、秒単位で照合するため`sensor_sim_virtual`で動かし、数ミリ秒で終わる）:
+シナリオ検証（Phase25。`sensor_sim`をPythonから実行し、[docs/scenarios.md](docs/scenarios.md)の期待結果と照合する。現在は設定ファイル異常時のフェイルセーフ・故障発生（Degraded確定まで）・電源再投入・冷却ファン制御・水温センサ故障時の冷却ファン制御・エンジンを切ってかけ直したときのファン制御。`sensor_sim`の1回の実行に約20秒かかり、全体で8回実行するため約2分30秒かかる。冷却ファンの3条件は、秒単位で照合するため`sensor_sim_virtual`で動かし、数ミリ秒で終わる）:
 
 ```bash
 make scenario
@@ -153,6 +162,18 @@ make sensor_sim_virtual && ./sensor_sim_virtual
 make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_example_fixture.txt $W/fixture.txt && (cd $W && $R/sensor_sim_virtual < /dev/null) | python3 tools/plot_fan_timeline.py > docs/images/fan_run_example.svg
 ```
 
+再生画面（`viewer/index.html`）のデータの作り直し（`tools/make_viewer_data.py`が16の場面ごとに作業用のフォルダで仮想時間版を動かし、その出力を1秒ごとの画面の情報にまとめて`viewer/index.html`の中に書き込む。場面ごとの期待する出来事と1つでも食い違えば、書き込まずに止まる。リポジトリ直下の`dtc_data.txt`は上書きしない）:
+
+```bash
+make sensor_sim_virtual && python3 tools/make_viewer_data.py
+```
+
+冒頭の再生画面の画像（`docs/images/viewer_comm_example.png`）の撮り直し（WSLから、Windowsに入っているEdgeを画面なしで動かして撮る。作業用のフォルダに再生画面のコピーを作り、開いたときの場面と秒だけを「通信の途切れ」の10秒目に書き換える。書き換えられなかったときは、撮らずに止まる）:
+
+```bash
+W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 2, index = 9,/' viewer/index.html > $W/shot.html && grep -q 'var scene = 2, index = 9,' $W/shot.html && "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" --headless=new --disable-gpu --hide-scrollbars --window-size=1000,1180 --screenshot="$(wslpath -w $W/shot.png)" "$(wslpath -w $W/shot.html)" && cp $W/shot.png docs/images/viewer_comm_example.png
+```
+
 ---
 
 ## 現在の実装
@@ -166,12 +187,12 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 | 固定幅整数型 | センサ値・統計値を `uint8_t` / `uint16_t` / `uint32_t` で型明示 |
 | DTC記録 | CRITICALに入った瞬間を検出し、センサ別の発生回数と状態区分（ACTIVE / HISTORY）を記録・表示 |
 | フリーズフレーム | 最初にCRITICALが発生した瞬間の全センサ値を1件だけ記録・表示 |
-| イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示。`fixture.txt`の`IGNITION=ON/OFF`で実行中ずっと固定することもできる |
+| イグニッション状態 | OFF/ONの状態をランダム更新・表示し、遷移した瞬間だけイベント表示。`fixture.txt`の`IGNITION=ON/OFF`で実行中ずっと固定することもできる。固定したときは、`IGNITION@N=ON/OFF`の行でN秒目以降の状態を切り替えられる |
 | DTC永続化 | プログラム終了時にDTC記録をテキストファイルへ保存し、次回起動時に読み込んで継続する |
 | 診断コマンド | プログラム終了時、イグニッションOFF時のみ`clear`コマンドを入力すると全DTC記録を、`clear <センサ名>`（speed/rpm/temp）を入力すると指定センサ1件分のDTC記録だけをリセットできる（UDS風のDTCクリアの簡易再現）。フリーズフレームは、その原因がクリア対象のセンサと一致する場合だけ合わせてリセットする。イグニッションON時はコマンドを受け付けず、受け付けなかった旨を表示する |
 | 閾値の外部設定 | `config.txt`（`KEY=VALUE`形式）から警告・状態判定の閾値9個を読み込む。ファイルが無ければデフォルト値（`alert.h`/`status.h`のマクロ値）のまま動作する |
 | ログレベル制御 | `config.txt`の`LOG_LEVEL`（0=INFO/1=WARNING/2=ERROR）で実行時のログ表示閾値を切り替える。`ALERT`はWARNING、`PERSIST`の保存失敗・データ破損はERROR、それ以外はINFOとして扱う |
-| センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する。`IGNITION=ON/OFF`の行があれば、`MODE`に関係なくイグニッションも固定する。`TEMP@N=値`の行があれば、N秒目以降の水温をその値に変える（冷却ファンのON/OFFを実行で確かめるため） |
+| センサ固定値注入 | `fixture.txt`（`MODE=FIXED/RANDOM`形式）から固定センサ値を読み込む。`MODE=FIXED`ならセンサ値を固定値に差し替え、ファイルが無い／`MODE=RANDOM`なら従来通りランダムで動作する。`IGNITION=ON/OFF`の行があれば、`MODE`に関係なくイグニッションも固定する。`TEMP@N=値`の行があれば、N秒目以降の水温をその値に変える（冷却ファンのON/OFFを実行で確かめるため）。`IGNITION`で固定したときは、`IGNITION@N=ON/OFF`の行でN秒目以降のイグニッションも切り替える（エンジンを切っている間とかけ直したときの動きを、決まった秒で確かめるため） |
 | 入力値域チェック | `config.txt`（閾値）・`fixture.txt`（センサ固定値）から読み込んだ値が、センサごとの物理的にありえる範囲（speed 0〜120／rpm 0〜6000／temp 25〜100）・LOG_LEVELの範囲（0〜2）に収まっているかを検証する。範囲外の値はそのキーだけ無視され、他のキーは反映される |
 | 故障確定とFail-safe | センサ別にCRITICALが3回連続したら「一時的なノイズ」ではなく確定した異常（Degraded）とみなし（Debounce）、確定後はそのセンサの値をフェイルセーフ値に差し替えて警告・統計に反映する（縮退動作）。NORMALが3回連続したら復帰する（Recovery）。DTC記録・診断コマンド（`clear`）はDegraded状態と独立して動作する |
 | 起動時自己診断（POST） | 起動時に`config.txt`・`dtc_data.txt`の読み込み結果を合成し、両方成功なら`[POST] Self-check passed`、いずれか失敗なら`[POST] Self-check did not pass, continuing with defaults`を表示する。判定結果で動作を変えるものではなく、既存のフェイルセーフ（デフォルト値継続）を可視化するのみ |
@@ -199,7 +220,7 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 | `persist.c` | DTC記録のファイルへの保存・読み込み、成功/失敗のログ表示 |
 | `cmd.c` | 標準入力から診断コマンド（`clear`／`clear <センサ名>`相当）を読み込み、解釈してDTC記録のクリア（全体／センサ単位）を要求する。想定外の入力は理由に応じて区別して通知する。イグニッションOFF時のみという受付条件を満たさない場合の通知（`cmd_notify_rejected`）も担う |
 | `config.c` | 閾値9個（alert.c/status.c）とログレベル（`LOG_LEVEL`）の設定値を保持し、`KEY=VALUE`形式の設定ファイルから読み込む（ファイルが無ければデフォルト値のまま）。読み込んだ値はvalidate.cで値域チェックしたうえで反映し、alert.c/status.cの判定、およびlogger.cの表示閾値に反映される |
-| `sim/fixture.c` | `fixture.txt`を`KEY=VALUE`形式で読み込む。`MODE=FIXED`なら`SPEED`/`RPM`/`TEMP`をvalidate.cで値域チェックしたうえでセンサ値に反映し、`main.c`はそれ以降の`sensor_update`呼び出しをスキップする。`MODE=RANDOM`・ファイル無し・`MODE`未指定の場合は何もせず、従来通りランダムに動作する。`IGNITION=ON/OFF`の行は別の関数（`fixture_load_ignition`）が読み、`MODE`に関係なくイグニッションを固定する（`main.c`は`ignition_update`の代わりに`ignition_set`を呼ぶ）。`TEMP@N=値`の行も別の関数（`fixture_load_temp_steps`）が読み、`MODE=FIXED`のとき、N秒目のサンプル以降の水温をその値に変える（`main.c`がサンプルごとに`fixture_temp_at`を呼ぶ）。センサ値は1秒に1回しか読まないので、ミリ秒ではなくサンプル番号で指定する |
+| `sim/fixture.c` | `fixture.txt`を`KEY=VALUE`形式で読み込む。`MODE=FIXED`なら`SPEED`/`RPM`/`TEMP`をvalidate.cで値域チェックしたうえでセンサ値に反映し、`main.c`はそれ以降の`sensor_update`呼び出しをスキップする。`MODE=RANDOM`・ファイル無し・`MODE`未指定の場合は何もせず、従来通りランダムに動作する。`IGNITION=ON/OFF`の行は別の関数（`fixture_load_ignition`）が読み、`MODE`に関係なくイグニッションを固定する（`main.c`は`ignition_update`の代わりに`ignition_set`を呼ぶ）。`TEMP@N=値`の行も別の関数（`fixture_load_temp_steps`）が読み、`MODE=FIXED`のとき、N秒目のサンプル以降の水温をその値に変える（`main.c`がサンプルごとに`fixture_temp_at`を呼ぶ）。センサ値は1秒に1回しか読まないので、ミリ秒ではなくサンプル番号で指定する。`IGNITION@N=ON/OFF`の行も同じ決め方で別の関数（`fixture_load_ignition_steps`）が読み、`IGNITION`の行で固定したときだけ、N秒目のサンプル以降のイグニッションをその状態にする（`main.c`がサンプルごとに`fixture_ignition_at`を呼ぶ） |
 | `validate.c` | `SensorId`（sensor.h）をインデックスにした値域テーブル（min/max）を持ち、値がセンサごとの物理的な範囲内かを判定する（`validate_in_range`）。LOG_LEVEL用に0〜2の範囲チェック（`validate_log_level`）も別途提供する。config.c・fixture.cの両方から呼ばれる |
 | `faultmgr.c` | センサ別に`status_check`の分類結果を見て、CRITICALの連続回数（Debounce）・確定後のNORMAL連続回数（Recovery）をカウントし、確定(Degraded)・復帰(Recovery)を判定する。Degraded中のセンサ値をフェイルセーフ値に差し替えたコピーを作る（`faultmgr_apply_safe_values`）。`main.c`は`diag_check`より後・`alert_check`/`stats_update`より前にこの差し替えを適用し、診断の正確性（raw値）と縮退動作の継続（フェイルセーフ値）を両立させる |
 | `timer.c` | 周期判定（`timer_init`/`timer_is_due`）を提供する。時刻は`timer_get_elapsed_ms`から得るだけで、時計が実時間か仮想時間かは知らない。`main.c`はサンプルループの待機（旧`sleep(1)`）をこの周期判定のポーリングに置き換えている |
@@ -221,7 +242,7 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 | `test/test_ignition.c` | 標準出力キャプチャ（`freopen`＋`dup`/`dup2`）による ignition.c の動作確認（`make test`で実行）。OFF/ONの4パターン（遷移あり/なし）で、遷移した瞬間だけイベントが出力されることを確認する。`ignition_set`で前回の状態が`previous`に残ること、同じ状態を続けても遷移イベントは最初の1回だけであることも確認する |
 | `test/test_cmd.c` | 固定値データによる `diag_clear`・`diag_clear_sensor`・`cmd_dispatch`（全体クリア／センサ単位クリア／不正なセンサ名／余分なトークン／空白のみ等）の動作確認（`make test`で実行）。標準入力を扱う `cmd_read_line` は対象外（`make run`での実行確認で扱う） |
 | `test/test_config.c` | 固定値データによる `config_load` のファイルパース動作確認（`make test`で実行）。正常系（全9キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち）を確認する |
-| `test/test_fixture.c` | 固定値データによる `fixture_apply` のファイルパース動作確認（`make test`で実行）。正常系（`MODE=FIXED`で全キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち、`MODE=RANDOM`時はセンサ値を変更しない）を確認する。`fixture_load_ignition`についても、ON/OFFの反映、行・ファイルが無い場合、不正な値の無視、後勝ち、`MODE`に関係なく有効なことを確認する。`fixture_load_temp_steps`/`fixture_temp_at`については、N秒目から切り替わること、行の順番によらないこと、不正なN・値の無視、同じNの後勝ち、行・ファイルが無い場合、行数の上限、`TEMP@N`行が`fixture_apply`・`fixture_load_ignition`の結果を変えないことを確認する |
+| `test/test_fixture.c` | 固定値データによる `fixture_apply` のファイルパース動作確認（`make test`で実行）。正常系（`MODE=FIXED`で全キーの反映）、異常系（未知のキー・値欠落・数値以外の行は無視される、値域外の値は無視される、キー重複時は後勝ち、`MODE=RANDOM`時はセンサ値を変更しない）を確認する。`fixture_load_ignition`についても、ON/OFFの反映、行・ファイルが無い場合、不正な値の無視、後勝ち、`MODE`に関係なく有効なことを確認する。`fixture_load_temp_steps`/`fixture_temp_at`については、N秒目から切り替わること、行の順番によらないこと、不正なN・値の無視、同じNの後勝ち、行・ファイルが無い場合、行数の上限、`TEMP@N`行が`fixture_apply`・`fixture_load_ignition`の結果を変えないことを確認する。`fixture_load_ignition_steps`/`fixture_ignition_at`（`IGNITION@N`行）についても、N秒目から切り替わること、不正な行の無視と同じNの後勝ち、行が無い場合、行数の上限、ほかの読み込みの結果を変えないことを確認する |
 | `test/test_validate.c` | 固定値による `validate_in_range`・`validate_log_level` の境界値確認（`make test`で実行）。speed/rpm/temp各センサの下限・上限・範囲外、不正な`SensorId`、LOG_LEVELの下限・上限・範囲外を確認する |
 | `test/test_faultmgr.c` | 固定値による `faultmgr_check`・`faultmgr_apply_safe_values` の動作確認（`make test`で実行）。Debounce確定前後の境界、連続が途切れた場合のカウント数え直し、Recoveryの境界（WARNING止まりでは復帰しない）、複数センサの独立性、フェイルセーフ値差し替え時のraw非破壊を確認する |
 | `test/test_timer.c` | timer.c の動作確認（`make test`で実行）。経過時間の単調増加、周期判定（`timer_is_due`）がinit直後はfalse・周期経過後はtrue・trueを返した直後は再びfalseに戻ることを確認する。実際の待機（数十ms）を伴う点が他のテストと異なる |
@@ -236,7 +257,7 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 | `scenario_test/test_config_failsafe.py` | `sensor_sim`を一時ディレクトリで最後まで実行し、標準出力・終了コードを設定ファイル異常時のフェイルセーフシナリオの期待結果と照合する結合テスト（`make scenario`で実行、Python標準の`unittest`）。`config.txt`が無い場合の2条件（`dtc_data.txt`も無い／`dtc_data.txt`は読み込める）と、`config.txt`が壊れている場合の1条件を確認する |
 | `scenario_test/test_fault_occurrence.py` | `fixture.txt`でセンサ値とイグニッション（ON）を固定して`sensor_sim`を実行し、故障発生シナリオの期待結果と照合する結合テスト（`make scenario`で実行）。水温だけがCRITICALの条件で、警告・DTC・フリーズフレーム・3サンプル目でのDegraded確定・確定後のフェイルセーフ値（警告・統計・メーター表示）を、車速と水温が同時にCRITICALの条件で、両方のDTC記録・フリーズフレームの原因（Speed）・Degradedのセンサだけの差し替えを確認する。値は最後まで固定したままなので、正常値に戻ってのRecoveredはこのテストの対象外（水温のRecoveredは`test_fan_control.py`で確認する） |
 | `scenario_test/test_power_cycle.py` | 同じ一時ディレクトリで`sensor_sim`を3回続けて実行し、電源再投入シナリオの期待結果と照合する結合テスト（`make scenario`で実行）。初回起動がDTC0件から始まること、終了時の保存、2回目（イグニッションOFF固定でDTCが更新されない）の起動直後にDTC・フリーズフレームが引き継がれていること、`dtc_data.txt`の有無によるPOSTの違い、3回目（再びCRITICAL）に発生回数が2になりフリーズフレームは上書きされないことを確認する |
-| `scenario_test/test_fan_control.py` | `fixture.txt`の`TEMP@N`行で実行の途中に水温を変えて`sensor_sim_virtual`を実行し、冷却ファン制御・水温センサ故障時の冷却ファン制御の期待結果と照合する結合テスト（`make scenario`で実行）。80℃でON・75〜80℃の間は保持・75℃でOFFになる秒、メーターに1秒遅れでファン状態が届くこと、水温センサの確定中も、閾値の間の水温で復帰した後もファンを止めず、75℃以下に下がってからOFFにすることを確認する。確定の瞬間の一瞬OFF（タスクの開始がずれたときだけ起きる）は、このテストでは見張れず、`test_fan_ecu.c`が見張る |
+| `scenario_test/test_fan_control.py` | `fixture.txt`の`TEMP@N`行で実行の途中に水温を変えて`sensor_sim_virtual`を実行し、冷却ファン制御・水温センサ故障時の冷却ファン制御の期待結果と照合する結合テスト（`make scenario`で実行）。80℃でON・75〜80℃の間は保持・75℃でOFFになる秒、メーターに1秒遅れでファン状態が届くこと、水温センサの確定中も、閾値の間の水温で復帰した後もファンを止めず、75℃以下に下がってからOFFにすることを確認する。`IGNITION@N`行でエンジンを途中で切ってかけ直し、切っている間は何もしないこと、かけ直すとファン制御ECUが判断をやり直すこと、切っている間を通信の途絶として記録しないことも確認する。確定の瞬間の一瞬OFF（タスクの開始がずれたときだけ起きる）は、このテストでは見張れず、`test_fan_ecu.c`が見張る |
 | `scenario_test/sensor_sim_runner.py` | シナリオ検証で共通に使う`sensor_sim`の実行関数。一時ディレクトリで1回実行する`run_sensor_sim`と、指定したディレクトリで実行する`run_in_dir`（同じディレクトリで2回実行し、保存されたファイルを引き継ぐ場合に使う）を提供する。どちらも実行ファイルを選べ、既定は`sensor_sim`（`test_fan_control.py`は`sensor_sim_virtual`を渡す）。ファイル名が`test_`で始まらないため、テストとしては実行されない。各テストファイルが先頭でこのフォルダを`import`の検索先に加えるため、モジュール名を指定した実行（`python3 -m unittest scenario_test.test_xxx`）でも見つかる |
 | `test/test_common.c` | test_diag.c・test_persist.c・test_cmd.c・test_alert.c・test_config.cで共通のテスト補助関数（サンプル投入用の`test_feed`/`test_run_sample`、デフォルトの`ConfigData`を返す`test_default_config`）を提供する。Phase13でテスト自体をUnity形式に統一したため、結果判定・サマリ表示（旧`test_check`/`test_summary`）の役割はUnityに置き換わった |
 
@@ -284,10 +305,10 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 - 設定ファイル（config.txt）の値は、validate.cでセンサごとの物理的な値域内か（`LOG_LEVEL`は0〜2の範囲内か）をチェックしており、範囲外ならそのキーを無視する。ただし`STATUS_SPEED_WARN`と`STATUS_SPEED_CRIT`のような、閾値同士の大小関係（WARNがCRITより大きい等の矛盾）はチェックしていない
 - ファン制御ECUのON/OFFの閾値（80℃・75℃）は`fan_ctrl.h`のマクロで、`config.txt`からは変えられない（変えるにはビルドし直す必要がある）。`config.c`はエンジン監視ECU側のモジュールのため、ファン側の値は加えていない
 - ログレベル（`LOG_LEVEL`）を上げても、`config.c`自身の読み込み結果ログ（設定ファイルの有無・読み込み完了の通知）は常に表示される。表示閾値はそのconfig読み込みの結果として決まるため、config読み込み自体のログをその閾値で制御できない
-- 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。実行の途中で値を変えられるのは水温（`TEMP@N`）だけで、車速・回転数は実行中一定の単一固定値のみ。イグニッションの固定（`IGNITION`）も、実行の途中でON→OFFのように変えることはできない
+- 固定値注入ファイル（fixture.txt）の値も、config.txtと同様にvalidate.cで値域チェックされる。実行の途中で値を変えられるのは水温（`TEMP@N`）だけで、車速・回転数は実行中一定の単一固定値のみ。イグニッションを途中で切り替える`IGNITION@N`は、`IGNITION`の行で固定したときだけ使われ、ランダムなイグニッションには混ぜない
 - cppcheckのMISRA C:2012アドオン（`--addon=misra`）が検出する21.6/21.10（標準入出力・time.h使用制限）と15.5（単一出口）には準拠していない。前者はPC上のシミュレータという設計前提そのもの（`printf`/`fopen`/`time`を使う）と、後者はガード節（早期return）による可読性重視の設計と衝突するため、意図的に不採用としている
 - 故障確定（Debounce/Degraded/Recovery、`faultmgr.c`）の状態は、DTC記録（`persist.c`）とは異なり電源再投入をまたいで保存されない（プログラム起動のたびに未確定状態から再開する）。診断コマンド（`clear`）でDTCをクリアしても、Degraded状態自体はリセットされない（独立した状態として扱う）
-- 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は単体テストの対象外で、`make run`での実行確認が中心になる。このうち`config.txt`・`dtc_data.txt`の有無によるPOSTの結果、故障発生時（Degraded確定まで）の処理の流れ、電源再投入をまたいだDTCの保存・読み込みは、`sensor_sim`を外から実行するシナリオ検証（`make scenario`、Phase25）で自動検証している。`TEMP@N`行による水温の差し替えから冷却ファンの流れまでも、`sensor_sim_virtual`を使うシナリオ検証で自動検証している
+- 起動時自己診断（POST）は`config.txt`/`dtc_data.txt`が読み込めたかだけを見ており、内容が意味的に正しいか（値域・整合性）までは判定しない。またmain.cはUnityのテストターゲットに含められない（main関数が重複しリンクできない）ため、POSTを含むmain.c内の処理全般は単体テストの対象外で、`make run`での実行確認が中心になる。このうち`config.txt`・`dtc_data.txt`の有無によるPOSTの結果、故障発生時（Degraded確定まで）の処理の流れ、電源再投入をまたいだDTCの保存・読み込みは、`sensor_sim`を外から実行するシナリオ検証（`make scenario`、Phase25）で自動検証している。`TEMP@N`行による水温の差し替えから冷却ファンの流れまでと、`IGNITION@N`行によるイグニッションの切り替えも、`sensor_sim_virtual`を使うシナリオ検証で自動検証している
 - DTC発生回数（`DtcEntry.count`、`uint8_t`）は上限（255）を超えると飽和させず0に巻き戻る。dtc_data.txtで永続化され複数回の起動をまたいで積み上がる値のため理論上は起こりうるが、通算256回以上の発生が必要であり現実的な発生頻度は低い
 - `config.txt`/`fixture.txt`の数値パース（`sscanf`の`%d`）は、値がint型の範囲を超える場合の動作を保証していない（値域チェック`validate_in_range`が働く前の段階のため）。ローカルで自分が編集する前提のファイルであり、外部・未信頼な入力を想定した対策はしていない
 - CAN通信（`can.c`）は実プロセス分離・実IPC（SocketCAN等）を使わず、単一プロセス内の共有メモリ（`CanBus`）でエンジンECU役・メーターECU役を表現している。実チップ間の物理的な通信遅延やバス調停の実態は再現していない（IDは実車の優先度慣例に合わせて値を割り当てているが、実際のアービトレーションには使っていない）
@@ -304,3 +325,4 @@ make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_exampl
 - Scheduler（`scheduler.c`）は優先度・オーバーラン検出を持たず、登録数も固定上限（`SCHEDULER_MAX_TASKS`、8個）で周期0ms・重複登録への防御もない最小構成。実車OSEK/AUTOSAR OSが持つoffset（複数タスクの起動タイミングを意図的にずらし、CPU/バス負荷のスパイクを避ける仕組み）も、タスクが1個のみの現状では効果が無いため実装していない
 - テストカバレッジ計測（`make coverage`）は19テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない
 - Makefileは、どの`.h`がどの`.c`に読まれるかを区別せず、`include/`・`sim/`・`test/`のいずれかの`.h`が変われば全ての実行ファイル・テストを作り直す（必要以上に作り直すが、ビルドは数秒で済む）。`vendor/unity/`のヘッダは依存関係に含めていない
+- 再生画面（`viewer/index.html`）は、データを作ったときの16場面の出力を再生するだけで、画面から別の条件を起こすことはできない。冷却ファンを回している理由は、本体が理由の変化をログに出さないため、出力からファン制御ECUと同じ決まりで読み替えて表示している。GitHub上では画面としては表示されない（HTMLの中身が文字のまま出る）ため、ダウンロードして開く必要がある

@@ -39,6 +39,7 @@ typedef struct {
     Ignition          *ignition;
     bool              ignition_fixed;        /* fixture.txtのIGNITIONで固定する場合true（Phase25） */
     IgnitionState     ignition_fixed_state;  /* ignition_fixedがtrueのときに使う状態 */
+    const FixtureIgnitionSteps *ignition_steps; /* fixture.txtのIGNITION@N行（途中で切り替える状態）。ignition_fixedのときだけ使う */
     bool              fixture_fixed;
     const FixtureTempSteps *temp_steps;      /* fixture.txtのTEMP@N行（途中で変える水温）。fixture_fixedのときだけ使う */
     VehicleSensorData *sensor_data;
@@ -82,7 +83,10 @@ static void run_sample_cycle(void *context) {
     (void)snprintf(sample_line, sizeof(sample_line), "[Sample %02d]", ctx->sample_index);
     log_print(sample_line);
     if (ctx->ignition_fixed) {
-        ignition_set(ctx->ignition, ctx->ignition_fixed_state); /* fixture.txtで固定した状態で更新する (書く) */
+        /* IGNITION@N行があれば、このサンプルの状態に切り替える。当てはまる行が無ければIGNITION=の状態のまま */
+        IgnitionState state = ctx->ignition_fixed_state;
+        (void)fixture_ignition_at(ctx->ignition_steps, ctx->sample_index, &state);
+        ignition_set(ctx->ignition, state);           /* fixture.txtで固定した状態で更新する (書く) */
     } else {
         ignition_update(ctx->ignition);               /* イグニッション状態を更新する (書く) */
     }
@@ -175,6 +179,9 @@ int main(void) {
     /* fixture.txtにTEMP@N行があれば、N秒目以降の水温を変える。行が無ければcount=0で何も変えない */
     FixtureTempSteps temp_steps;
     (void)fixture_load_temp_steps(&temp_steps, FIXTURE_FILENAME);
+    /* fixture.txtにIGNITION@N行があれば、N秒目以降のイグニッションを切り替える（IGNITION=で固定したときだけ使う） */
+    FixtureIgnitionSteps ignition_steps;
+    (void)fixture_load_ignition_steps(&ignition_steps, FIXTURE_FILENAME);
 
     VehicleStats stats;              /* 統計データ（全サンプル分を集計） */
     stats_init(&stats);
@@ -236,6 +243,7 @@ int main(void) {
         .ignition      = &ignition,
         .ignition_fixed       = ignition_fixed,
         .ignition_fixed_state = fixed_ignition,
+        .ignition_steps       = &ignition_steps,
         .fixture_fixed = fixture_fixed,
         .temp_steps    = &temp_steps,
         .sensor_data   = &sensor_data,
