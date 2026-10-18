@@ -109,7 +109,7 @@ TEST_DEBOUNCE_TARGET = test_debounce
 # can.c の動作確認用テスト（フレーム送受信の往復一致、Timeout/Invalid Dataの確定・復帰の確認、main.c は使わない）
 # can.cはfaultmgr.c（送信データの組み立て元）・validate.c（Invalid Data判定）・timer.c（timestamp）・
 # debounce.c（Timeout/Invalid Dataの確定・復帰）に依存する（Phase20）
-TEST_CAN_SRCS = test/test_can.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_SRCS = test/test_can.c src/can.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_TARGET = test_can
 
 # dtc_status.c の動作確認用テスト（発生回数・状態区分(NONE/ACTIVE/HISTORY)の更新確認、main.c は使わない）
@@ -125,7 +125,7 @@ TEST_CAN_DIAG_TARGET = test_can_diag
 # can_fault.c の動作確認用テスト（Drop判定・can_fault.txtのファイルパース確認、main.c は使わない）
 # can_fault.cはcan.c（ラップ対象の送信関数）・faultmgr.c（警告灯データの送信元）・debounce.c/validate.c
 # （can.cが依存）・timer.c（can.cのtimestamp取得）に依存する（Phase22）
-TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/faultmgr.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
+TEST_CAN_FAULT_SRCS = test/test_can_fault.c sim/can_fault.c src/can.c src/debounce.c src/timer.c src/timer_clock.c src/validate.c src/logger.c $(UNITY_DIR)/unity.c
 TEST_CAN_FAULT_TARGET = test_can_fault
 
 # fan_ctrl.c の動作確認用テスト（水温によるファン要求のヒステリシス判定、main.c は使わない）

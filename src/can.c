@@ -1,9 +1,10 @@
-#include <stdio.h>
 #include "can.h"
 #include "timer.h"
 #include "validate.h"
 #include "debounce.h"
-#include "logger.h"
+
+/* このファイルは、フレームの読み書きと受信の監視（途絶・値域外）だけを担う。
+   受信した値の表示はメーターECU役（meter.c）が、警告灯データの中身を作るのは送る側（main.c）が行う */
 
 /* busの全フレームをvalid=falseの初期状態にする */
 void can_bus_init(CanBus *bus) {
@@ -49,12 +50,12 @@ void can_send_engine_status(CanBus *bus, const VehicleSensorData *data) {
     frame->valid        = true;
 }
 
-/* エンジンECU役：fault_mgrの確定状態(FAULT_DEGRADED)をビット詰めし警告灯データとしてbusへ書く */
-void can_send_fault_status(CanBus *bus, const FaultManager *fault_mgr) {
+/* エンジンECU役：statusのセンサ別の確定異常フラグをビット詰めし、警告灯データとしてbusへ書く */
+void can_send_fault_status(CanBus *bus, const CanFaultStatus *status) {
     uint8_t flags = 0U;
-    if (fault_mgr->state[SENSOR_SPEED] == FAULT_DEGRADED) { flags |= CAN_FAULT_BIT_SPEED; }
-    if (fault_mgr->state[SENSOR_RPM]   == FAULT_DEGRADED) { flags |= CAN_FAULT_BIT_RPM; }
-    if (fault_mgr->state[SENSOR_TEMP]  == FAULT_DEGRADED) { flags |= CAN_FAULT_BIT_TEMP; }
+    if (status->fault_speed) { flags |= CAN_FAULT_BIT_SPEED; }
+    if (status->fault_rpm)   { flags |= CAN_FAULT_BIT_RPM; }
+    if (status->fault_temp)  { flags |= CAN_FAULT_BIT_TEMP; }
 
     CanFrame *frame = &bus->frames[CAN_MSG_FAULT_STATUS];
     frame->id           = CAN_ID_FAULT_STATUS;
@@ -169,34 +170,4 @@ CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanSt
 
     *out = mon->last_fan_status;
     return mon->state[CAN_MSG_FAN_STATUS];
-}
-
-/* メーターECU役の表示：受信したゲージデータとリンク状態を1行でコンソールに出力する */
-void can_print_engine_status(const CanEngineStatus *status, CanLinkState state) {
-    char line[80];   /* "EngineStatus[LOST] speed=120 rpm=6000 temp=100" が収まるサイズ */
-    const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
-
-    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
-    (void)snprintf(line, sizeof(line), "EngineStatus[%s] speed=%d rpm=%d temp=%d",
-                   state_str, (int)status->speed, (int)status->rpm, (int)status->temperature);
-    log_print_leveled(LOG_INFO, "METER", line);
-}
-
-/* メーターECU役の表示：受信した警告灯データとリンク状態を1行でコンソールに出力する */
-void can_print_fault_status(const CanFaultStatus *status, CanLinkState state) {
-    char line[64];   /* "FaultStatus[LOST] speed=0 rpm=1 temp=0" が収まるサイズ */
-    const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
-
-    (void)snprintf(line, sizeof(line), "FaultStatus[%s] speed=%d rpm=%d temp=%d",
-                   state_str, (int)status->fault_speed, (int)status->fault_rpm, (int)status->fault_temp);
-    log_print_leveled(LOG_INFO, "METER", line);
-}
-
-/* メーターECU役の表示：受信したファン状態とリンク状態を1行でコンソールに出力する（Phase26） */
-void can_print_fan_status(const CanFanStatus *status, CanLinkState state) {
-    char line[32];   /* "FanStatus[LOST] fan=1" が収まるサイズ */
-    const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
-
-    (void)snprintf(line, sizeof(line), "FanStatus[%s] fan=%d", state_str, (int)status->fan_on);
-    log_print_leveled(LOG_INFO, "METER", line);
 }

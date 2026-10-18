@@ -46,8 +46,9 @@ C言語でパソコン上に再現したプログラム。エンジンの見張�
 | | エンジンを切っている間 | 何もしない。かけ直すと、ファン係は判断をやり直す |
 | 点検 | 整備工場での点検 | エンジンを切っているときだけ、点検用のコマンドで記録を全部、またはセンサーごとに消せる。おかしな命令は受け付けない |
 
-上の表の16通りは、冒頭の再生画面（[viewer/index.html](viewer/index.html)）で、1秒ずつ再生して見られる。
-リポジトリをダウンロードし、このファイルをブラウザで開く（ファイル1つで動き、インストールは要らない）。
+上の表の16通りは、冒頭の再生画面で、1秒ずつ再生して見られる。ブラウザで次のURLを開く（インストールは要らない）。
+[https://tanaka780.github.io/automotive-ecu-learning/viewer/](https://tanaka780.github.io/automotive-ecu-learning/viewer/)
+（リポジトリの[viewer/index.html](viewer/index.html)を、GitHub Pagesで公開したもの。ダウンロードしてこのファイルを開いても動く）
 
 ### 取り組みの量（2026年10月時点）
 
@@ -117,6 +118,7 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 - Editor / AI: ChatGPT, Claude
 - Compiler: gcc (`-Wall -Wextra -std=c11`)
 - Python 3（シナリオ検証`make scenario`、READMEの図・再生画面のデータ作成用。標準ライブラリのみ使用）
+- Microsoft Edge（Windows側。冒頭の再生画面の画像を撮り直すときだけ使う）
 
 ---
 
@@ -227,10 +229,10 @@ W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 2, index = 9,/' v
 | `timer_clock.c` | 実時間の時計と待機。単調増加クロック（`CLOCK_MONOTONIC`）による起動からの経過時間取得（`timer_get_elapsed_ms`）と、指定したミリ秒だけ実際に待つ`timer_wait_ms`（`scheduler.c`のポーリングが使う）を提供する。検証用のビルド（`sensor_sim_virtual`）では`sim/timer_clock_virtual.c`に差し替わる |
 | `scheduler.c` | 関数ポインタ・context・`timer.c`の`Timer`を1組にしたタスクを固定長配列（`SCHEDULER_MAX_TASKS`）で複数保持し、優先度を持たず登録順に周期判定・実行する（`scheduler_add_task`/`scheduler_run_due`）。各タスクは初回呼び出し時は周期を待たず即座に実行され（offset=0相当）、2回目以降は登録した周期(`period_ms`)ごとに実行される。`main.c`はサンプル周期タスク（`run_sample_cycle`）に加え、Phase20でCAN送受信タスクを3個、Phase26でファン制御ECU役の受信タスク2個・送信タスク1個と、メーターECU役のファン状態受信タスク1個を登録している（計8個で、`SCHEDULER_MAX_TASKS`（8）と一致） |
 | `debounce.c` | 「一時的なノイズ」と「確定した異常」を区別する、Debounce（確定）・Recovery（復帰）の連続回数カウントだけを汎用化したもの（`debounce_update`）。対象（センサ値かCAN通信か等）の意味は一切知らない。`faultmgr.c`（センサ異常）・`can.c`（CAN通信異常）の両方から呼ばれる（Phase20、`validate.c`と同じ「2つ目の利用先ができたら汎用化する」基準で`faultmgr.c`から切り出した） |
-| `can.c` | 実CANに準拠したフレーム構造（ID・DLC・data配列）を持つ`CanFrame`と、メッセージごとに最新の1フレームを保持する`CanBus`（バス役）を提供する。エンジンECU役はゲージデータ（`can_send_engine_status`）・警告灯データ（`can_send_fault_status`、`faultmgr.c`の確定状態をビット詰め）を送信する。メーターECU役は受信時に送信タイムスタンプ（`timer_get_elapsed_ms`）から新しいフレームかを判定し（非ブロッキング方式）、Timeout（新しいフレームが来ない）・Invalid Data（`validate.c`での値域外判定）を`debounce.c`で確定・復帰させる（`CanLinkState`、`FaultManager`とは別カテゴリの通信専用状態）。確定・復帰のログは出さず、受信したECU側が出す。ファン状態（ID 0x300、bit0=ファンON）の送信・受信も持つ（Phase26。送信はファン制御ECU役、受信はメーターECU役が使う） |
+| `can.c` | 実CANに準拠したフレーム構造（ID・DLC・data配列）を持つ`CanFrame`と、メッセージごとに最新の1フレームを保持する`CanBus`（バス役）を提供する。エンジンECU役はゲージデータ（`can_send_engine_status`）・警告灯データ（`can_send_fault_status`、送る側が作ったセンサ別の確定異常フラグ`CanFaultStatus`をビット詰め。`FaultManager`は知らない）を送信する。メーターECU役は受信時に送信タイムスタンプ（`timer_get_elapsed_ms`）から新しいフレームかを判定し（非ブロッキング方式）、Timeout（新しいフレームが来ない）・Invalid Data（`validate.c`での値域外判定）を`debounce.c`で確定・復帰させる（`CanLinkState`、`FaultManager`とは別カテゴリの通信専用状態）。確定・復帰のログも、受信した値の表示も持たず、受信したECU側が行う。ファン状態（ID 0x300、bit0=ファンON）の送信・受信も持つ（Phase26。送信はファン制御ECU役、受信はメーターECU役が使う） |
 | `dtc_status.c` | DTCの状態区分（`DtcStatus`：NONE/ACTIVE/HISTORY）と、前回/今回の異常有無を比較して発生回数・状態区分を更新する`dtc_status_update`を提供する。異常の発生源（物理センサかCAN通信か等）は一切知らない汎用ロジックで、`diag.c`・`can_diag.c`の両方から呼ばれる |
 | `can_diag.c` | CAN通信リンク別（`CanMessageId`）のDTC相当の記録（`CanDtcRecord`：発生回数・状態区分）を提供する。`CanLinkState`の前回/今回比較を`dtc_status.c`に渡して更新する（`can_diag_check`）。物理センサの`DtcEntry`（`SensorId`）とは別の識別子で持ち、実車のU-code（通信異常）とP-code（物理故障）の分離に倣う |
-| `meter.c` | メーターECU役の受信処理。警告灯データ・ゲージデータ・ファン状態（Phase26で追加。途絶はファン制御ECUの異常として記録する）を`can.c`の受信関数で受け取り、CANリンクのLost/RecoveryをDTC相当の記録（`can_diag.c`）に反映して表示する。Lost/Recoveryのログ（`[CAN] ... link lost/recovered`）もここで出す。受け取るcontext（`MeterContext`）はエンジン監視ECUの内部状態へのポインタを持たず、CANのbusとイグニッション状態だけを読む。Schedulerへの登録は`main.c`が行う（Phase26で`main.c`から移動） |
+| `meter.c` | メーターECU役の受信処理。警告灯データ・ゲージデータ・ファン状態（Phase26で追加。途絶はファン制御ECUの異常として記録する）を`can.c`の受信関数で受け取り、CANリンクのLost/RecoveryをDTC相当の記録（`can_diag.c`）に反映して表示する。表示の関数（`meter_print_*`）と、Lost/Recoveryのログ（`[CAN] ... link lost/recovered`）もここに持つ（どちらも`can.c`から移した。文面は移す前と同じ）。受け取るcontext（`MeterContext`）はエンジン監視ECUの内部状態へのポインタを持たず、CANのbusとイグニッション状態だけを読む。Schedulerへの登録は`main.c`が行う（Phase26で`main.c`から移動） |
 | `fan_ctrl.c` | ファン制御ECUの、水温によるファンのON/OFF判断（`fan_ctrl_decide`）。80℃以上でON、75℃以下でOFF、その間は前回の要求を保つ（ヒステリシス）。CANは扱わず、受け取った水温と前回の要求から今回の要求を返すだけ。`fan_ecu.c`から呼ばれる（Phase26） |
 | `fan_ecu.c` | ファン制御ECU役の処理（Phase26）。警告灯データ・ゲージデータを受信し、CANリンクのLost/Recoveryを記録する（ログは`[FAN]`、DTC相当の記録の表示は`[FAN-DTC]`）。警告灯データを受けるたびに、受信途絶・水温センサの確定異常のどちらかがあればファンON、無ければ`fan_ctrl.c`の水温による要求でファン出力を決め、変わった瞬間だけ`[FAN] Fan ON (理由)`/`[FAN] Fan OFF`を出す。水温は、それより後に送られた最初の警告灯データで水温センサが正常と分かってから使う（確定・復帰の前後に、差し替え後の25℃で判断しないため）。イグニッションOFF→ONで判断の状態を戻し、新しく届いた水温を受け取るまでOFFのままにする。ファン状態として送る値（ファン出力）を返し、`main.c`が1000ms周期でbusへ送信する（ID 0x300）。受信監視状態（`CanMonitor`）とDTC相当の記録は、メーターECU役とは別に持つ |
 | `sim/can_fault.c` | `can_fault.txt`（`MODE=DROP/CORRUPT/NORMAL`、`TARGET=ENGINE_STATUS/FAULT_STATUS/FAN_STATUS`、`START_MS`/`END_MS`）を読み込む。`MODE=DROP`は指定期間だけ`can.c`の送信関数（`can_send_engine_status`/`can_send_fault_status`、Phase26で`can_send_fan_status`も追加）の呼び出しをスキップしてTimeoutを再現する。`MODE=CORRUPT`はEngineStatusのみ対応し、送信専用の値域外データ（speed/rpm/temp全て`0xFF`）を持つ一時コピーを作って`can_send_engine_status`に渡すことでInvalid Dataを再現する（実センサ値は変更せず物理センサ診断には影響しない。FaultStatus・FanStatusとの組み合わせは無効な指定として注入なし扱い）。`can.c`本体は変更せず送信をラップするのみ |
@@ -325,4 +327,4 @@ W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 2, index = 9,/' v
 - Scheduler（`scheduler.c`）は優先度・オーバーラン検出を持たず、登録数も固定上限（`SCHEDULER_MAX_TASKS`、8個）で周期0ms・重複登録への防御もない最小構成。実車OSEK/AUTOSAR OSが持つoffset（複数タスクの起動タイミングを意図的にずらし、CPU/バス負荷のスパイクを避ける仕組み）も、タスクが1個のみの現状では効果が無いため実装していない
 - テストカバレッジ計測（`make coverage`）は19テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない
 - Makefileは、どの`.h`がどの`.c`に読まれるかを区別せず、`include/`・`sim/`・`test/`のいずれかの`.h`が変われば全ての実行ファイル・テストを作り直す（必要以上に作り直すが、ビルドは数秒で済む）。`vendor/unity/`のヘッダは依存関係に含めていない
-- 再生画面（`viewer/index.html`）は、データを作ったときの16場面の出力を再生するだけで、画面から別の条件を起こすことはできない。冷却ファンを回している理由は、本体が理由の変化をログに出さないため、出力からファン制御ECUと同じ決まりで読み替えて表示している。GitHub上では画面としては表示されない（HTMLの中身が文字のまま出る）ため、ダウンロードして開く必要がある
+- 再生画面（`viewer/index.html`）は、データを作ったときの16場面の出力を再生するだけで、画面から別の条件を起こすことはできない。冷却ファンを回している理由は、本体が理由の変化をログに出さないため、出力からファン制御ECUと同じ決まりで読み替えて表示している。GitHubのリポジトリの画面では画面として表示されない（HTMLの中身が文字のまま出る）ため、GitHub Pagesで公開したURLか、ダウンロードしたファイルで開く。GitHub Pagesの公開内容は、`main`にpushした時点のものに更新される

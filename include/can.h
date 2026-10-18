@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "sensor.h"     /* VehicleSensorData を参照するために必要 */
-#include "faultmgr.h"   /* FaultManager を参照するために必要 */
 
 /* CAN通信の実現方式（Phase20、Day43決定）：実プロセス分離は行わず、単一プロセス内で
    エンジンECU役／メーターECU役をSchedulerタスクとして表現する。CanBusは両役が共有する
@@ -25,7 +24,7 @@ typedef enum {
 #define CAN_ID_ENGINE_STATUS 0x200U
 #define CAN_ID_FAN_STATUS    0x300U
 
-/* 警告灯データ(data[0])のビット割り当て。FaultManagerのSensorId(sensor.h)の並びに合わせる */
+/* 警告灯データ(data[0])のビット割り当て。SensorId(sensor.h)の並びに合わせる */
 #define CAN_FAULT_BIT_SPEED 0x01U
 #define CAN_FAULT_BIT_RPM   0x02U
 #define CAN_FAULT_BIT_TEMP  0x04U
@@ -60,7 +59,7 @@ typedef struct {
     uint8_t  temperature;
 } CanEngineStatus;
 
-/* 受信側が復元した警告灯データ（センサ別の確定異常フラグ） */
+/* 警告灯データの中身（センサ別の確定異常フラグ）。送信側はこれを詰め、受信側はこれに復元する */
 typedef struct {
     bool fault_speed;
     bool fault_rpm;
@@ -98,8 +97,9 @@ void can_monitor_init(CanMonitor *mon);
 
 /* エンジンECU役：dataの生値をゲージデータとしてbusへ書く */
 void can_send_engine_status(CanBus *bus, const VehicleSensorData *data);
-/* エンジンECU役：fault_mgrの確定状態(FAULT_DEGRADED)をビット詰めし警告灯データとしてbusへ書く */
-void can_send_fault_status(CanBus *bus, const FaultManager *fault_mgr);
+/* エンジンECU役：statusのセンサ別の確定異常フラグをビット詰めし、警告灯データとしてbusへ書く。
+   FaultManagerからフラグを作るのは送る側（main.c）で、このファイルはFaultManagerを知らない */
+void can_send_fault_status(CanBus *bus, const CanFaultStatus *status);
 /* ファン制御ECU役：まとめた後のファン出力(fan_on)をファン状態としてbusへ書く（Phase26）。
    水温による要求・強制ONの区別は送らず、実際の出力だけを送る */
 void can_send_fan_status(CanBus *bus, bool fan_on);
@@ -112,12 +112,5 @@ CanLinkState can_receive_engine_status(CanMonitor *mon, const CanBus *bus, CanEn
 CanLinkState can_receive_fault_status(CanMonitor *mon, const CanBus *bus, CanFaultStatus *out);
 /* メーターECU役：busから最新のファン状態を読み、Timeoutを検知してmonの状態を更新する（Phase26） */
 CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanStatus *out);
-
-/* メーターECU役の表示：受信したゲージデータとリンク状態を1行でコンソールに出力する */
-void can_print_engine_status(const CanEngineStatus *status, CanLinkState state);
-/* メーターECU役の表示：受信した警告灯データとリンク状態を1行でコンソールに出力する */
-void can_print_fault_status(const CanFaultStatus *status, CanLinkState state);
-/* メーターECU役の表示：受信したファン状態とリンク状態を1行でコンソールに出力する（Phase26） */
-void can_print_fan_status(const CanFanStatus *status, CanLinkState state);
 
 #endif /* CAN_H */

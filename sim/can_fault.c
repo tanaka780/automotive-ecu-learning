@@ -170,11 +170,11 @@ void can_fault_send_engine_status(const CanFaultConfig *cfg, CanBus *bus, const 
     can_send_engine_status(bus, data);
 }
 
-void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const FaultManager *fault_mgr) {
+void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const CanFaultStatus *status) {
     if (can_fault_is_dropped(cfg, CAN_MSG_FAULT_STATUS, can_fault_elapsed_since_start(cfg))) {
         return;   /* 意図的に送信しない(Timeoutを再現) */
     }
-    can_send_fault_status(bus, fault_mgr);
+    can_send_fault_status(bus, status);
 }
 
 void can_fault_send_fan_status(const CanFaultConfig *cfg, CanBus *bus, bool fan_on) {

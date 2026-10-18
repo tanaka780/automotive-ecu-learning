@@ -127,7 +127,13 @@ static void run_sample_cycle(void *context) {
 static void run_can_send_fault_status(void *context) {
     EngineCanSendContext *ctx = (EngineCanSendContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
-        can_fault_send_fault_status(ctx->can_fault, ctx->can_bus, ctx->fault_mgr);
+        /* 送る中身（センサ別の確定異常フラグ）はここで作り、can.cにはFaultManagerを渡さない */
+        CanFaultStatus status = {
+            .fault_speed = (ctx->fault_mgr->state[SENSOR_SPEED] == FAULT_DEGRADED),
+            .fault_rpm   = (ctx->fault_mgr->state[SENSOR_RPM]   == FAULT_DEGRADED),
+            .fault_temp  = (ctx->fault_mgr->state[SENSOR_TEMP]  == FAULT_DEGRADED),
+        };
+        can_fault_send_fault_status(ctx->can_fault, ctx->can_bus, &status);
     }
 }
 

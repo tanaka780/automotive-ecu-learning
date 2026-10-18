@@ -4,9 +4,8 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "can.h"        /* CanMessageId, CanBus を参照するために必要 */
+#include "can.h"        /* CanMessageId, CanBus, CanFaultStatus を参照するために必要 */
 #include "sensor.h"      /* VehicleSensorData を参照するために必要 */
-#include "faultmgr.h"    /* FaultManager を参照するために必要 */
 
 /* CAN Fault Injection設定ファイルのデフォルトのファイル名 */
 #define CAN_FAULT_FILENAME "can_fault.txt"
@@ -64,7 +63,7 @@ bool can_fault_is_corrupted(const CanFaultConfig *cfg, CanMessageId msg, uint32_
 void can_fault_send_engine_status(const CanFaultConfig *cfg, CanBus *bus, const VehicleSensorData *data);
 
 /* エンジンECU役の送信をラップする（警告灯データ版） */
-void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const FaultManager *fault_mgr);
+void can_fault_send_fault_status(const CanFaultConfig *cfg, CanBus *bus, const CanFaultStatus *status);
 
 /* ファン制御ECU役の送信をラップする（ファン状態版、Phase26）。Drop対象の期間は送信しない */
 void can_fault_send_fan_status(const CanFaultConfig *cfg, CanBus *bus, bool fan_on);

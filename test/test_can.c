@@ -4,7 +4,6 @@
 
 #include "unity.h"
 #include "can.h"
-#include "faultmgr.h"
 #include <time.h>   /* nanosleep() */
 
 void setUp(void) {}
@@ -125,18 +124,15 @@ static void test_engine_status_recovers_after_valid_receptions(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "有効なフレームを3回連続受信すればCAN_LINK_OKに復帰する");
 }
 
-/* FaultManagerの確定状態が、警告灯データのビットフラグとして正しく復元されることを確認する */
+/* 送ったセンサ別の確定異常フラグが、警告灯データのビットフラグとして正しく復元されることを確認する */
 static void test_fault_status_roundtrip(void) {
     CanBus bus;
     can_bus_init(&bus);
     CanMonitor mon;
     can_monitor_init(&mon);
 
-    FaultManager fm;
-    faultmgr_init(&fm);
-    fm.state[SENSOR_RPM] = FAULT_DEGRADED;   /* RPMだけ確定異常にする（直接組み立て、faultmgr_checkは経由しない） */
-
-    can_send_fault_status(&bus, &fm);
+    CanFaultStatus sent = { .fault_speed = false, .fault_rpm = true, .fault_temp = false };   /* RPMだけ確定異常 */
+    can_send_fault_status(&bus, &sent);
 
     CanFaultStatus status;
     CanLinkState state = can_receive_fault_status(&mon, &bus, &status);
