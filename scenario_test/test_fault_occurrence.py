@@ -12,6 +12,9 @@ test_meter_shows_failsafe_value_and_fault_bitとtest_only_faulty_sensors_use_fai
 メーターECU役の表示（[METER]の行）を照合している。Phase25ではメーター表示を対象外としているが、
 エンジン監視ECUが送るCANの値（フェイルセーフ値・故障ビット）を確かめる手段が他に無いため残した。
 3ECU化でメーターが別のプロセスになると、この2つは見直しが必要になる。
+
+RpmSensorFaultTestだけは、仮想時間版（sensor_sim_virtual）で実行する。確かめたいのは、main.cが故障確定の状態から
+警告灯データの中身を作る配線で、本番版と同じコードのため。仮想時間版は出力が毎回同じで、数ミリ秒で終わる。
 """
 import os
 import sys
@@ -20,13 +23,16 @@ import unittest
 # リポジトリ直下からモジュール名で実行した場合（python3 -m unittest scenario_test.test_xxx）も
 # sensor_sim_runnerが見つかるよう、このフォルダをimportの検索先に加える
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sensor_sim_runner import run_sensor_sim
+from sensor_sim_runner import SENSOR_SIM_VIRTUAL, run_sensor_sim
 
 # 水温だけがCRITICAL（status_checkは閾値を超えたらCRITICALなので、91以上が必要）。speed・rpmは正常範囲
 SINGLE_FAULT_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=95\nIGNITION=ON\n"
 
 # 車速と水温が同時にCRITICAL。rpmは正常範囲
 MULTI_FAULT_FIXTURE = "MODE=FIXED\nSPEED=110\nRPM=2000\nTEMP=95\nIGNITION=ON\n"
+
+# 回転数だけがCRITICAL（5000を超える必要がある）。speed・tempは正常範囲
+RPM_FAULT_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=5500\nTEMP=70\nIGNITION=ON\n"
 
 
 def split_samples(lines):
@@ -146,6 +152,41 @@ class MultiSensorFaultTest(unittest.TestCase):
         """フェイルセーフ値に差し替わるのはDegradedのセンサだけで、rpmは生の値のまま"""
         self.assertIn("[METER] EngineStatus[OK] speed=0 rpm=2000 temp=25", self.samples[3])
         self.assertIn("[METER] FaultStatus[OK] speed=1 rpm=0 temp=1", self.samples[3])
+
+
+class RpmSensorFaultTest(unittest.TestCase):
+    """回転数だけがCRITICALのまま、イグニッションON固定で20サンプル実行する（仮想時間版）。
+    温度・速度の条件では立たない、警告灯データの回転数のビットを確かめる。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result = run_sensor_sim({"fixture.txt": RPM_FAULT_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.lines = cls.result.stdout.splitlines()
+        cls.samples = split_samples(cls.lines)
+
+    def test_runs_to_the_end_with_ignition_on(self):
+        """前提：イグニッションがONに固定され、サンプルループが最後まで実行される"""
+        self.assertIn("[FIXTURE] Ignition fixed: ON", self.lines)
+        self.assertEqual(0, self.result.returncode)
+        self.assertEqual(list(range(1, 21)), sorted(self.samples))
+
+    def test_meter_shows_failsafe_rpm_and_rpm_fault_bit(self):
+        """確定前の2サンプル目は回転数の生の値とビット0、確定した3サンプル目からは
+        フェイルセーフ値（rpm 800）と回転数のビット1がメーターに届く"""
+        self.assertIn("[METER] EngineStatus[OK] speed=50 rpm=5500 temp=70", self.samples[2])
+        self.assertIn("[METER] FaultStatus[OK] speed=0 rpm=0 temp=0", self.samples[2])
+        self.assertIn("[FAULT] Degraded: RPM", self.samples[3])
+        self.assertIn("[METER] EngineStatus[OK] speed=50 rpm=800 temp=70", self.samples[3])
+        self.assertIn("[METER] FaultStatus[OK] speed=0 rpm=1 temp=0", self.samples[3])
+
+    def test_other_fault_bits_never_set(self):
+        """回転数の確定異常で、速度・温度のビットは一度も立たない
+        （回転数のビットを、他のセンサの状態から作る誤りを見つけるため）"""
+        fault_lines = [line for line in self.lines if line.startswith("[METER] FaultStatus[")]
+        self.assertTrue(fault_lines)
+        for line in fault_lines:
+            self.assertIn("speed=0", line)
+            self.assertIn("temp=0", line)
 
 
 if __name__ == "__main__":

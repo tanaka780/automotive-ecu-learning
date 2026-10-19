@@ -138,6 +138,19 @@ class FanSensorFaultTest(unittest.TestCase):
         actual = [meter_value(self.samples, n, "EngineStatus", "temp") for n in range(1, 21)]
         self.assertEqual(expected, actual)
 
+    def test_temp_fault_bit_follows_degraded_and_recovered(self):
+        """ファン制御ECUへ届く警告灯データの水温ビットは、確定した3サンプル目から1になり、
+        復帰した10サンプル目から0に戻る（どのサンプルも、その秒に届いたビットはすべて同じ値）。
+        回復で0に戻ることは、ファンが14サンプル目に止まることでも間接的に分かるが、
+        ファンの判断に頼らず、main.cが送る中身を直接確かめるために置く"""
+        expected = [0, 0] + [1] * 7 + [0] * 11
+        actual = []
+        for n in range(1, 21):
+            bits = {line.split("temp=")[1] for line in self.samples[n]
+                    if line.startswith("[METER] FaultStatus[")}
+            actual.append(int(bits.pop()) if len(bits) == 1 else bits)
+        self.assertEqual(expected, actual)
+
     def test_fan_not_turned_off_by_substituted_temperature(self):
         """1秒目に95℃でONになり、確定中も、閾値の間の78℃で復帰した後もOFFにしない。
         OFFになるのは、OFF閾値以下の70℃になった14秒目だけ"""
