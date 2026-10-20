@@ -23,13 +23,13 @@ static void test_rpm_range(void) {
     TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_RPM, 6001), "rpm: 上限超過6001は範囲外");
 }
 
-/* temperature（25〜100）の境界値・範囲外を確認する */
+/* temperature（25〜130）の境界値・範囲外を確認する */
 static void test_temp_range(void) {
     TEST_ASSERT_TRUE_MESSAGE(validate_in_range(SENSOR_TEMP, 25),  "temp: 下限25は範囲内");
-    TEST_ASSERT_TRUE_MESSAGE(validate_in_range(SENSOR_TEMP, 100), "temp: 上限100は範囲内");
+    TEST_ASSERT_TRUE_MESSAGE(validate_in_range(SENSOR_TEMP, 130), "temp: 上限130は範囲内");
     TEST_ASSERT_TRUE_MESSAGE(validate_in_range(SENSOR_TEMP, 60),  "temp: 中間値60は範囲内");
     TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_TEMP, 24),  "temp: 下限未満24は範囲外");
-    TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_TEMP, 101), "temp: 上限超過101は範囲外");
+    TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_TEMP, 131), "temp: 上限超過131は範囲外");
 }
 
 /* SensorIdとして不正な値（SENSOR_COUNT以上）を渡した場合、常に範囲外になることを確認する */

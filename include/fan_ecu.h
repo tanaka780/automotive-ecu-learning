@@ -19,6 +19,7 @@ typedef struct {
     bool     temp_judged;      /* その水温より後に送られた警告灯データで、使えるかを決めたか */
     bool     temp_usable;      /* 決めた結果。その警告灯データで水温センサが正常ならtrue */
     FanState temp_request;     /* 水温による要求（fan_ctrl_decideに渡す前回の要求） */
+    bool     hold_on;          /* 強制ONが解けた後、使える水温が決まるまでONを保つか（Phase27） */
     FanState output;           /* 要求をまとめた後のファン出力 */
 } FanEcuState;
 

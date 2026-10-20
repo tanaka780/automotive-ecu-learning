@@ -141,6 +141,25 @@ static void test_fault_status_roundtrip(void) {
     TEST_ASSERT_FALSE_MESSAGE(status.fault_speed, "Speedは異常なしのまま復元される");
     TEST_ASSERT_TRUE_MESSAGE(status.fault_rpm, "RPMの確定異常フラグが復元される");
     TEST_ASSERT_FALSE_MESSAGE(status.fault_temp, "Tempは異常なしのまま復元される");
+    TEST_ASSERT_FALSE_MESSAGE(status.overheat, "高温の通知は無しのまま復元される");
+}
+
+/* 高温の通知（Phase27）は、センサの確定異常とは別のビットで往復することを確認する */
+static void test_fault_status_overheat_roundtrip(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    CanFaultStatus sent = { .fault_speed = false, .fault_rpm = false, .fault_temp = false, .overheat = true };
+    can_send_fault_status(&bus, &sent);
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(CAN_FAULT_BIT_OVERHEAT, bus.frames[CAN_MSG_FAULT_STATUS].data[0],
+          "高温の通知だけなら、高温のビットだけが立つ");
+
+    CanFaultStatus status;
+    (void)can_receive_fault_status(&mon, &bus, &status);
+    TEST_ASSERT_TRUE_MESSAGE(status.overheat, "高温の通知が復元される");
+    TEST_ASSERT_FALSE_MESSAGE(status.fault_temp, "水温センサの確定異常とは別に扱われる");
 }
 
 /* 警告灯データも、一度も送信されないまま受信を3回連続で呼ぶとCAN_LINK_LOSTになることを確認する */
@@ -225,6 +244,7 @@ int main(void) {
     RUN_TEST(test_engine_status_invalid_data_confirms_lost);
     RUN_TEST(test_engine_status_recovers_after_valid_receptions);
     RUN_TEST(test_fault_status_roundtrip);
+    RUN_TEST(test_fault_status_overheat_roundtrip);
     RUN_TEST(test_fault_status_timeout_after_missed_receptions);
     RUN_TEST(test_fan_status_roundtrip_on);
     RUN_TEST(test_fan_status_roundtrip_off);

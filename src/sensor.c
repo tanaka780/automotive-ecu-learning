@@ -15,7 +15,7 @@ void sensor_update(VehicleSensorData *data) {
     /* 複合式（rand()を含む演算）を直接キャストせず、一旦同じ本質型(int)の変数で受けてからキャストする（MISRA 10.8） */
     int speed_raw = rand() % 121;          /* 0〜120 km/h */
     int rpm_raw   = 800 + rand() % 5201;   /* 800〜6000 rpm */
-    int temp_raw  = 25 + rand() % 76;      /* 25〜100 ℃ */
+    int temp_raw  = 25 + rand() % 106;     /* 25〜130 ℃ */
 
     data->speed       = (uint8_t)speed_raw;
     data->rpm         = (uint16_t)rpm_raw;

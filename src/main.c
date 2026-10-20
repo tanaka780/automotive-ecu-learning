@@ -59,6 +59,7 @@ typedef struct {
     const Ignition *ignition;
     CanBus         *can_bus;
     const FaultManager *fault_mgr;
+    const ConfigData   *config;      /* 高温の通知の閾値（Phase27） */
     const CanFaultConfig *can_fault; /* Phase22 */
 } EngineCanSendContext;
 
@@ -104,11 +105,11 @@ static void run_sample_cycle(void *context) {
         sensor_print(ctx->sensor_data);                   /* センサ値を表示する (読む) */
         status_check(ctx->sensor_status, ctx->sensor_data, ctx->config); /* 状態レベルを判定する */
         status_print(ctx->sensor_status);                 /* 状態レベルを表示する (読む) */
-        diag_check(ctx->dtc, ctx->sensor_status, ctx->sensor_data); /* CRITICALに入った瞬間をDTCとして記録する */
-        faultmgr_check(ctx->fault_mgr, ctx->sensor_status); /* 確定した異常(Degraded)・復帰(Recovery)を判定する */
+        diag_check(ctx->dtc, ctx->sensor_status, ctx->sensor_data); /* 異常（CRITICAL・値域外）に入った瞬間をDTCとして記録する */
+        faultmgr_check(ctx->fault_mgr, ctx->sensor_status, ctx->sensor_data); /* 確定した異常(Degraded)・復帰(Recovery)を判定し、値域内だった直前の値を覚える */
 
         /* diag_check/status_checkは常にraw(sensor_data)を見て診断の正確性を保つ。
-           Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え、
+           Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え（確定前の値域外は直前の値域内の値に差し替え、Phase27）、
            以降の警告・統計はeffective_dataを使って動作を継続する */
         VehicleSensorData effective_data;
         faultmgr_apply_safe_values(ctx->fault_mgr, ctx->sensor_data, &effective_data);
@@ -117,6 +118,7 @@ static void run_sample_cycle(void *context) {
 
         /* ゲージデータ(CAN_MSG_ENGINE_STATUS)は、Degraded中のセンサをフェイルセーフ値に差し替えた
            effective_dataを送る。実車のダッシュボードもリンプホーム中は縮退後の値を表示するため。
+           確定前の値域外の値も差し替え済みのため、値域外の値は送らない（Phase27）。
            can_fault.txtでDrop対象・期間が指定されていれば、意図的に送信しない（Phase22） */
         can_fault_send_engine_status(ctx->can_fault, ctx->can_bus, &effective_data);
     }
@@ -127,11 +129,13 @@ static void run_sample_cycle(void *context) {
 static void run_can_send_fault_status(void *context) {
     EngineCanSendContext *ctx = (EngineCanSendContext *)context;
     if (ctx->ignition->current == IGNITION_ON) {
-        /* 送る中身（センサ別の確定異常フラグ）はここで作り、can.cにはFaultManagerを渡さない */
+        /* 送る中身（センサ別の確定異常フラグと高温の通知）はここで作り、can.cにはFaultManagerを渡さない。
+           高温は、判断に使える水温（値域外なら値域内だった直前の値）で判断する（Phase27） */
         CanFaultStatus status = {
             .fault_speed = (ctx->fault_mgr->state[SENSOR_SPEED] == FAULT_DEGRADED),
             .fault_rpm   = (ctx->fault_mgr->state[SENSOR_RPM]   == FAULT_DEGRADED),
             .fault_temp  = (ctx->fault_mgr->state[SENSOR_TEMP]  == FAULT_DEGRADED),
+            .overheat    = status_is_overheat(faultmgr_usable_temperature(ctx->fault_mgr), ctx->config),
         };
         can_fault_send_fault_status(ctx->can_fault, ctx->can_bus, &status);
     }
@@ -201,7 +205,7 @@ int main(void) {
 
     SensorStatus sensor_status;     /* 状態レベル（status_check が毎回上書き、初期化不要） */
 
-    DtcRecord dtc;                  /* DTC記録（センサ別のCRITICAL発生回数、前回状態を内部に保持） */
+    DtcRecord dtc;                  /* DTC記録（センサ別の異常の発生回数、前回状態を内部に保持） */
     diag_init(&dtc);
     bool dtc_ok = persist_load_dtc(&dtc, PERSIST_DTC_FILENAME);
     /* 保存ファイルが無い/壊れている場合もdiag_initの初期値のまま継続する（フェイルセーフ）。詳細はpersist.c内のログ参照 */
@@ -267,6 +271,7 @@ int main(void) {
         .ignition    = &ignition,
         .can_bus     = &can_bus,
         .fault_mgr   = &fault_mgr,
+        .config      = &config,
         .can_fault   = &can_fault_cfg,
     };
     /* 受信タスク(メーターECU役)用。警告灯・ゲージ・ファン状態の受信タスクで共有する */

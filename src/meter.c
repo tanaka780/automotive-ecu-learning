@@ -7,24 +7,33 @@
 
 /* 受信した値の表示はメーターECU役の仕事なので、can.cから移した。文面・タグは移す前と同じ */
 
-/* 受信したゲージデータとリンク状態を1行でコンソールに出力する */
-static void meter_print_engine_status(const CanEngineStatus *status, CanLinkState state) {
-    char line[80];   /* "EngineStatus[LOST] speed=120 rpm=6000 temp=100" が収まるサイズ */
+/* 受信したゲージデータとリンク状態を1行でコンソールに出力する。
+   temp_unknownがtrue（水温センサの確定異常の通知を受けている間）は、水温を"--"と表示する（Phase27）。
+   ゲージデータの水温はフェイルセーフ値（常温相当）に差し替わっており、本当の水温は分からない。
+   水温センサの故障の後にオーバーヒートしても見分けられないため、常温の値を見せて安心させない */
+static void meter_print_engine_status(const CanEngineStatus *status, CanLinkState state, bool temp_unknown) {
+    char line[80];   /* "EngineStatus[LOST] speed=120 rpm=6000 temp=130" が収まるサイズ */
     const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
 
     /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
-    (void)snprintf(line, sizeof(line), "EngineStatus[%s] speed=%d rpm=%d temp=%d",
-                   state_str, (int)status->speed, (int)status->rpm, (int)status->temperature);
+    if (temp_unknown) {
+        (void)snprintf(line, sizeof(line), "EngineStatus[%s] speed=%d rpm=%d temp=--",
+                       state_str, (int)status->speed, (int)status->rpm);
+    } else {
+        (void)snprintf(line, sizeof(line), "EngineStatus[%s] speed=%d rpm=%d temp=%d",
+                       state_str, (int)status->speed, (int)status->rpm, (int)status->temperature);
+    }
     log_print_leveled(LOG_INFO, "METER", line);
 }
 
 /* 受信した警告灯データとリンク状態を1行でコンソールに出力する */
 static void meter_print_fault_status(const CanFaultStatus *status, CanLinkState state) {
-    char line[64];   /* "FaultStatus[LOST] speed=0 rpm=1 temp=0" が収まるサイズ */
+    char line[64];   /* "FaultStatus[LOST] speed=0 rpm=1 temp=0 overheat=0" が収まるサイズ */
     const char *state_str = (state == CAN_LINK_OK) ? "OK" : "LOST";
 
-    (void)snprintf(line, sizeof(line), "FaultStatus[%s] speed=%d rpm=%d temp=%d",
-                   state_str, (int)status->fault_speed, (int)status->fault_rpm, (int)status->fault_temp);
+    (void)snprintf(line, sizeof(line), "FaultStatus[%s] speed=%d rpm=%d temp=%d overheat=%d",
+                   state_str, (int)status->fault_speed, (int)status->fault_rpm, (int)status->fault_temp,
+                   (int)status->overheat);
     log_print_leveled(LOG_INFO, "METER", line);
 }
 
@@ -67,7 +76,9 @@ void meter_receive_engine_status(MeterContext *ctx) {
                               (state == CAN_LINK_LOST) ? "EngineStatus link lost" : "EngineStatus link recovered");
         }
         can_diag_check(ctx->can_dtc, CAN_MSG_ENGINE_STATUS, previous, state);
-        meter_print_engine_status(&status, state);
+        /* 水温が分からないかは、最後に受け取った警告灯データの水温のビットで決める（Phase27）。
+           警告灯データの受信タスクが先に動くため、確定・復帰の秒には、その秒のビットで表示が切り替わる */
+        meter_print_engine_status(&status, state, ctx->can_monitor->last_fault_status.fault_temp);
     }
 }
 

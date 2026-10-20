@@ -9,7 +9,14 @@
 /* 固定値注入ファイルのデフォルトのファイル名 */
 #define FIXTURE_FILENAME "fixture.txt"
 
+/* TEMP=・TEMP@N=にOPEN・SHORTと書いたときの水温（Phase27）。
+   実車の水温センサは、断線すると低い側・短絡すると高い側の、ありえない値になる。
+   それを再現するため、値域（validate.cの25〜130℃）の外の値にする */
+#define FIXTURE_TEMP_OPEN  0U     /* 断線：低い側の値域外 */
+#define FIXTURE_TEMP_SHORT 255U   /* 短絡：高い側の値域外（uint8_tの最大値） */
+
 /* 指定したファイルをKEY=VALUE形式（MODE=FIXED/RANDOM, SPEED=, RPM=, TEMP=）で読み込む。
+   TEMP=には数値のほか、OPEN・SHORTも書ける（値域外の値として入れる）。
    MODE=FIXEDであれば、指定されたセンサ値をdataに反映してtrueを返す
    （SPEED/RPM/TEMPのうち指定の無いキーはdataの値をそのまま保持する）。
    ファイルが無い場合・MODE=RANDOMの場合・MODE行が無い場合はdataを変更せずfalseを返す
@@ -36,7 +43,7 @@ typedef struct {
 
 /* 指定したファイルからTEMP@N=値の行だけを読み込み、stepsに入れる（MODEの値には関係しない。
    固定値を使うかどうかはfixture_applyの戻り値で呼び出し側が決める）。
-   Nが1以上の整数でない行・値域外の値の行は無視する。同じNが2回あれば後に書かれた値を使う。
+   値はTEMP=と同じく、数値のほかOPEN・SHORTも書ける。Nが1以上の整数でない行・値域外の数値の行は無視する。同じNが2回あれば後に書かれた値を使う。
    FIXTURE_TEMP_STEP_MAXを超えた分は無視する。ファイルが無い場合・行が無い場合はcount=0にしてfalseを返す */
 bool fixture_load_temp_steps(FixtureTempSteps *steps, const char *filename);
 

@@ -16,6 +16,7 @@ void fan_ecu_init(FanEcuState *state) {
     state->temp_judged    = false;
     state->temp_usable    = false;
     state->temp_request   = FAN_OFF;
+    state->hold_on        = false;
     state->output         = FAN_OFF;
 }
 
@@ -60,25 +61,34 @@ static void fan_ecu_judge_temp(FanEcuContext *ctx, const CanFaultStatus *fault) 
 /* 理由ごとの要求をまとめてファン出力を決め、変わった瞬間だけログを出す。
    受信途絶・水温センサの確定異常の間は、受け取った水温が使えない（古い、またはフェイルセーフ値に
    差し替わっている）ため強制ONにし、水温による要求は更新せずに保つ。強制ONの影響を、解除後の
-   水温による判断に残さないため */
+   水温による判断に残さないため。
+   ただし、強制ONが解けた直後は、まだ使える水温が決まっていないことがある。水温センサの確定異常の解除は
+   警告灯データ1回で伝わり、解除後の水温より先に届くため（通信の途絶は、正常受信が3回続くまで解けないので、
+   その間に水温が決まる）。そこで、使える水温が決まるまではONを保ち、強制ONの前の要求（例：OFF）で
+   一瞬止めない（Phase27） */
 static void fan_ecu_decide(FanEcuContext *ctx, CanLinkState fault_link, const CanFaultStatus *fault) {
     FanEcuState *st = ctx->state;
     const char *reason = NULL;   /* ONにする理由。NULLならOFF */
 
     if ((fault_link == CAN_LINK_LOST) || (ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS] == CAN_LINK_LOST)) {
         reason = "link lost";
+        st->hold_on = true;
     } else if (fault->fault_temp) {
         reason = "temp sensor fault";
-    } else if (st->has_valid_temp) {
-        /* 使えると決まった水温でだけ要求を更新する。まだ決まっていない・使えない水温なら、前の要求を保つ */
-        if (st->temp_judged && st->temp_usable) {
-            st->temp_request = fan_ctrl_decide(st->temp, st->temp_request);
-        }
-        if (st->temp_request == FAN_ON) {
-            reason = "temp";
-        }
+        st->hold_on = true;
     } else {
-        /* 水温をまだ受け取っていない間は判断せず、OFFのままにする */
+        /* 使えると決まった水温でだけ要求を更新する。まだ決まっていない・使えない水温なら、前の要求を保つ */
+        if (st->has_valid_temp && st->temp_judged && st->temp_usable) {
+            st->temp_request = fan_ctrl_decide(st->temp, st->temp_request);
+            st->hold_on = false;
+        }
+        if (st->hold_on) {
+            reason = "hold";   /* 強制ONの続きなので出力はONのままで、ログには出ない */
+        } else if (st->has_valid_temp && (st->temp_request == FAN_ON)) {
+            reason = "temp";
+        } else {
+            /* 水温による要求がOFFの間と、水温をまだ受け取っていない間（判断しない）はOFF */
+        }
     }
 
     FanState next = (reason != NULL) ? FAN_ON : FAN_OFF;

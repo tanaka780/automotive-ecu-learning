@@ -24,12 +24,12 @@ from sensor_sim_runner import run_in_dir
 # 開ければ読み込めた扱いになるconfig.txt（POSTの結果をdtc_data.txtの有無だけで決めるために置く）
 VALID_CONFIG = "LOG_LEVEL=0\n"
 
-FIRST_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=95\nIGNITION=ON\n"
+FIRST_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=115\nIGNITION=ON\n"
 SECOND_FIXTURE = "IGNITION=OFF\n"
 # フリーズフレームが上書きされていないことを見分けるため、1回目と違う値にする
-THIRD_FIXTURE = "MODE=FIXED\nSPEED=60\nRPM=2000\nTEMP=99\nIGNITION=ON\n"
+THIRD_FIXTURE = "MODE=FIXED\nSPEED=60\nRPM=2000\nTEMP=119\nIGNITION=ON\n"
 
-FIRST_FREEZE_FRAME = "[DTC] Freeze Frame (trigger: Temp) Speed: 50 km/h RPM:2000 Temp: 95 C"
+FIRST_FREEZE_FRAME = "[DTC] Freeze Frame (trigger: Temp) Speed: 50 km/h RPM:2000 Temp:115 C"
 
 
 class PowerCycleTest(unittest.TestCase):
@@ -88,8 +88,8 @@ class PowerCycleTest(unittest.TestCase):
         self.assertIn("[DTC] Temp  ACTIVE   CRITICAL occurrences: 2", self.third_lines)
 
     def test_freeze_frame_not_overwritten_after_reboot(self):
-        """再起動後にCRITICALが発生しても、フリーズフレームは最初の値（Speed 50・Temp 95）のまま"""
-        self.assertIn("Speed:  60 km/h | RPM: 2000 | Temp:  99 C", self.third_lines)
+        """再起動後にCRITICALが発生しても、フリーズフレームは最初の値（Speed 50・Temp 115）のまま"""
+        self.assertIn("Speed:  60 km/h | RPM: 2000 | Temp: 119 C", self.third_lines)
         self.assertIn(FIRST_FREEZE_FRAME, self.third_lines)
 
 

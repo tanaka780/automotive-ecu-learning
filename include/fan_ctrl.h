@@ -7,11 +7,11 @@
 /* ファン制御ECUの、水温による冷却ファンのON/OFF判断（Phase26）。通信（CAN）は扱わず、
    受け取った値から次の要求を計算するだけにする。受信・送信はファン制御ECU本体のモジュールが担う */
 
-/* 水温によるファン要求のON/OFF境界 [℃]。80℃以上でON、75℃以下でOFF、その間は前回の要求を保つ。
-   エンジン監視ECUのSTATUS_TEMP_WARN(80)とは別の意味の値で、値が同じなのは偶然
+/* 水温によるファン要求のON/OFF境界 [℃]。95℃以上でON、90℃以下でOFF、その間は前回の要求を保つ。
+   エンジン監視ECUのSTATUS_TEMP_WARN(100)より低くし、注意の段階になる前にファンが回り始めるようにする
    （実車では後から調整できる設定値として持つが、このプロジェクトではマクロで簡略化する） */
-#define FAN_ON_TEMP  80U
-#define FAN_OFF_TEMP 75U
+#define FAN_ON_TEMP  95U
+#define FAN_OFF_TEMP 90U
 
 typedef enum {
     FAN_OFF = 0,

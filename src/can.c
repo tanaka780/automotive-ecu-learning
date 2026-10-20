@@ -33,6 +33,7 @@ void can_monitor_init(CanMonitor *mon) {
     mon->last_fault_status.fault_speed  = false;
     mon->last_fault_status.fault_rpm    = false;
     mon->last_fault_status.fault_temp   = false;
+    mon->last_fault_status.overheat     = false;
     mon->last_fan_status.fan_on         = false;
 }
 
@@ -50,12 +51,13 @@ void can_send_engine_status(CanBus *bus, const VehicleSensorData *data) {
     frame->valid        = true;
 }
 
-/* エンジンECU役：statusのセンサ別の確定異常フラグをビット詰めし、警告灯データとしてbusへ書く */
+/* エンジンECU役：statusのセンサ別の確定異常フラグと高温の通知をビット詰めし、警告灯データとしてbusへ書く */
 void can_send_fault_status(CanBus *bus, const CanFaultStatus *status) {
     uint8_t flags = 0U;
     if (status->fault_speed) { flags |= CAN_FAULT_BIT_SPEED; }
     if (status->fault_rpm)   { flags |= CAN_FAULT_BIT_RPM; }
     if (status->fault_temp)  { flags |= CAN_FAULT_BIT_TEMP; }
+    if (status->overheat)    { flags |= CAN_FAULT_BIT_OVERHEAT; }
 
     CanFrame *frame = &bus->frames[CAN_MSG_FAULT_STATUS];
     frame->id           = CAN_ID_FAULT_STATUS;
@@ -127,6 +129,7 @@ CanLinkState can_receive_fault_status(CanMonitor *mon, const CanBus *bus, CanFau
         mon->last_fault_status.fault_speed = (frame->data[0] & CAN_FAULT_BIT_SPEED) != 0U;
         mon->last_fault_status.fault_rpm   = (frame->data[0] & CAN_FAULT_BIT_RPM)   != 0U;
         mon->last_fault_status.fault_temp  = (frame->data[0] & CAN_FAULT_BIT_TEMP)  != 0U;
+        mon->last_fault_status.overheat    = (frame->data[0] & CAN_FAULT_BIT_OVERHEAT) != 0U;
     }
 
     bool is_bad  = !is_new;

@@ -23,16 +23,22 @@ void diag_init(DtcRecord *dtc) {
     dtc->freeze_frame.captured         = false;
 }
 
-/* 前回CRITICALでなく今回CRITICALになった瞬間（エッジ）だけを発生回数として記録し、
-   現在CRITICAL中ならACTIVE、CRITICALから外れたらHISTORYに遷移させる（発生回数・状態区分の更新自体は
+/* DTCとして数える異常の段階：危険（CRITICAL）か値域外（OUT_OF_RANGE、Phase27）。
+   危険と値域外の間を移る場合（例：オーバーヒート中に断線）は異常が続いているため、数え直さない */
+static bool diag_is_bad(SensorLevel level) {
+    return (level == LEVEL_CRITICAL) || (level == LEVEL_OUT_OF_RANGE);
+}
+
+/* 前回異常（危険・値域外）でなく今回異常になった瞬間（エッジ）だけを発生回数として記録し、
+   現在異常中ならACTIVE、異常から外れたらHISTORYに遷移させる（発生回数・状態区分の更新自体は
    dtc_status_updateに委譲する、Phase21）。最初のエッジでフリーズフレーム（車両状態のスナップショット）
    を1件だけ記録する処理は、物理センサ固有のためdiag.cに残す */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data) {
     for (int i = 0; i < (int)SENSOR_COUNT; i++) {
-        bool was_bad = (dtc->previous.levels[i] == LEVEL_CRITICAL);
-        bool is_bad  = (status->levels[i] == LEVEL_CRITICAL);
+        bool was_bad = diag_is_bad(dtc->previous.levels[i]);
+        bool is_bad  = diag_is_bad(status->levels[i]);
 
-        /* 全体で最初のCRITICAL発生時だけスナップショットを記録する（以降は上書きしない） */
+        /* 全体で最初の異常の発生時だけスナップショットを記録する（以降は上書きしない） */
         if (is_bad && (!was_bad) && (!dtc->freeze_frame.captured)) {
             dtc->freeze_frame.data           = *data;
             dtc->freeze_frame.trigger_sensor = (SensorId)i;

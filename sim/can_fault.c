@@ -144,7 +144,7 @@ static uint32_t can_fault_elapsed_since_start(const CanFaultConfig *cfg) {
 }
 
 /* 値域外に固定した送信専用の破損値（Phase22拡張バックログ）。0xFFはspeed(0〜120)・rpm(0〜6000、
-   2バイトとも0xFFで65535)・temperature(25〜100)のいずれでも確実に値域外になる。実車のSNA
+   2バイトとも0xFFで65535)・temperature(25〜130)のいずれでも確実に値域外になる。実車のSNA
    （Signal Not Available、全ビット1）の慣例にも近い。実センサ値(dataの指す先)は変更しないため、
    diag.c/faultmgr.c等の物理センサ診断には影響しない */
 static void build_corrupted_engine_status(VehicleSensorData *out) {

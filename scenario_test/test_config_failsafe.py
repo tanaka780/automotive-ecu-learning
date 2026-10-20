@@ -14,9 +14,9 @@ from sensor_sim_runner import run_sensor_sim
 
 # config_initのデフォルト値（alert.h/status.h）のまま動いているときの、config_printの出力
 DEFAULT_CONFIG_LINE = (
-    "[CONFIG] AlertMax(speed=100,rpm=5000,temp=90) "
-    "StatusWarn(speed=80,rpm=4000,temp=80) "
-    "StatusCrit(speed=100,rpm=5000,temp=90)"
+    "[CONFIG] AlertMax(speed=100,rpm=5000,temp=110) "
+    "StatusWarn(speed=80,rpm=4000,temp=100) "
+    "StatusCrit(speed=100,rpm=5000,temp=110)"
 )
 
 # 値が11個揃った、DTC0件のdtc_data.txt（persist.cの保存形式）

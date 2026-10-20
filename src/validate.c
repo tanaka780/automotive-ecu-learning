@@ -14,7 +14,7 @@ bool validate_in_range(SensorId id, int value) {
     static const SensorRange sensor_ranges[SENSOR_COUNT] = {
         [SENSOR_SPEED] = {0, 120},    /* 車速 [km/h]: 停車〜一般道上限相当 */
         [SENSOR_RPM]   = {0, 6000},   /* エンジン回転数 [rpm]: アイドリング〜レッドライン */
-        [SENSOR_TEMP]  = {25, 100},   /* 水温 [℃]: 常温〜冷却水沸点手前 */
+        [SENSOR_TEMP]  = {25, 130},   /* 水温 [℃]: 常温〜オーバーヒートより上（Phase27で上限を100から実車に近い値へ上げた） */
     };
 
     if (id >= SENSOR_COUNT) {

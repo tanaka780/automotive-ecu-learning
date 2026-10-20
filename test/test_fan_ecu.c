@@ -105,6 +105,34 @@ static void test_returns_to_temp_after_fault(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "解除後はOFF閾値の水温でOFF");
 }
 
+/* 確定異常の前の要求がOFFで、解除の通知が解除後の水温より先に届いても、使える水温が決まるまではONを保つ。
+   保たなければ、前の要求(OFF)で一瞬止まる（最初から断線していて、高温で直る場合、Phase27） */
+static void test_hold_on_after_temp_fault_until_usable_temp(void) {
+    receive_engine(25U);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "前提: 異常の前の要求はOFF");
+    receive_engine(25U);
+    receive_fault(CAN_FAULT_BIT_TEMP);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "確定異常でON");
+    receive_fault(0U);   /* 解除の通知だけが先に届く。手元の水温(25)は確定中に送られたもので使えない */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "使える水温が決まるまではONを保つ");
+    receive_engine(100U);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "解除後の100℃でONのまま");
+    TEST_ASSERT_FALSE_MESSAGE(state.hold_on, "使える水温が決まったら、保つのをやめる");
+}
+
+/* ONを保つのは使える水温が決まるまでで、決まった水温がOFF閾値以下ならOFFにする（Phase27） */
+static void test_hold_on_ends_with_low_usable_temp(void) {
+    receive_engine(25U);
+    receive_fault(CAN_FAULT_BIT_TEMP);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: 解除直後はONを保つ");
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "使える水温がOFF閾値ならOFF");
+}
+
 /* 警告灯データの途絶が確定するとONにし、復帰すると水温による判断に戻る */
 static void test_fault_status_lost_forces_on(void) {
     receive_engine(FAN_OFF_TEMP);
@@ -272,6 +300,8 @@ int main(void) {
     RUN_TEST(test_temp_fault_forces_on);
     RUN_TEST(test_temp_request_kept_during_fault);
     RUN_TEST(test_returns_to_temp_after_fault);
+    RUN_TEST(test_hold_on_after_temp_fault_until_usable_temp);
+    RUN_TEST(test_hold_on_ends_with_low_usable_temp);
     RUN_TEST(test_fault_status_lost_forces_on);
     RUN_TEST(test_engine_status_lost_forces_on);
     RUN_TEST(test_ignition_cycle_discards_old_temp);

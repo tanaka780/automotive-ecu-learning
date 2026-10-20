@@ -31,13 +31,85 @@ static void test_status_boundary(void) {
     status_check(&status, &d, test_default_config());
     TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_RPM] == LEVEL_CRITICAL, "RPM=5001でCRITICALになる(境界値+1)");
 
-    d.rpm = 2000; d.temperature = 90;
+    d.rpm = 2000; d.temperature = 110;
     status_check(&status, &d, test_default_config());
-    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_WARNING, "Temp=90はCRITICALではない(WARNING境界)");
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_WARNING, "Temp=110はCRITICALではない(WARNING境界)");
 
-    d.temperature = 91;
+    d.temperature = 111;
     status_check(&status, &d, test_default_config());
-    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_CRITICAL, "Temp=91でCRITICALになる(境界値+1)");
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_CRITICAL, "Temp=111でCRITICALになる(境界値+1)");
+}
+
+/* status_check は、値域（validate.c）の外の値を閾値より先に値域外（OUT_OF_RANGE）にすることを確認する（Phase27） */
+static void test_status_out_of_range(void) {
+    VehicleSensorData d;
+    SensorStatus status;
+
+    d.speed = 50; d.rpm = 2000; d.temperature = 130;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_CRITICAL, "Temp=130(値域の上限)は危険で、値域外ではない");
+
+    d.temperature = 131;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_OUT_OF_RANGE, "Temp=131(上限+1)は危険ではなく値域外");
+
+    d.temperature = 255;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_OUT_OF_RANGE, "Temp=255(ショートの再現)は値域外");
+
+    d.temperature = 25;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_NORMAL, "Temp=25(値域の下限)は正常");
+
+    d.temperature = 24;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_OUT_OF_RANGE, "Temp=24(下限-1)は値域外");
+
+    d.temperature = 0;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_TEMP] == LEVEL_OUT_OF_RANGE, "Temp=0(断線の再現)は正常ではなく値域外");
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_SPEED] == LEVEL_NORMAL, "Tempが値域外でも、Speedの判定は変わらない");
+
+    d.temperature = 50; d.speed = 121; d.rpm = 6001;
+    status_check(&status, &d, test_default_config());
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_SPEED] == LEVEL_OUT_OF_RANGE, "Speed=121(上限+1)も値域外");
+    TEST_ASSERT_TRUE_MESSAGE(status.levels[SENSOR_RPM] == LEVEL_OUT_OF_RANGE, "RPM=6001(上限+1)も値域外");
+}
+
+/* status_is_overheat は、状態判定と同じ閾値で危険（CRITICAL）の段階だけを高温とすることを確認する（Phase27） */
+static void test_status_is_overheat(void) {
+    TEST_ASSERT_FALSE_MESSAGE(status_is_overheat(110, test_default_config()), "110(危険の境界)は高温ではない");
+    TEST_ASSERT_TRUE_MESSAGE(status_is_overheat(111, test_default_config()), "111(境界+1)は高温");
+    TEST_ASSERT_TRUE_MESSAGE(status_is_overheat(130, test_default_config()), "130(値域の上限)も高温");
+    TEST_ASSERT_FALSE_MESSAGE(status_is_overheat(131, test_default_config()), "131は値域外なので高温とは判断しない");
+    TEST_ASSERT_FALSE_MESSAGE(status_is_overheat(255, test_default_config()), "255(ショートの再現)も高温とは判断しない");
+
+    ConfigData cfg = *test_default_config();
+    cfg.status_temp_crit = 100;
+    TEST_ASSERT_TRUE_MESSAGE(status_is_overheat(101, &cfg), "閾値を下げれば、その閾値で判断する");
+}
+
+/* 値域外に入った瞬間もDTCとして数え、危険と値域外の間を移っても数え直さないことを確認する（Phase27） */
+static void test_dtc_counts_out_of_range(void) {
+    DtcRecord dtc;
+    diag_init(&dtc);
+
+    test_feed(&dtc, 50, 2000, 50);    /* Sample1: 正常値 */
+    test_feed(&dtc, 50, 2000, 0);     /* Sample2: 断線（値域外）になった瞬間 */
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[SENSOR_TEMP].count, "Sample2後: 値域外に入った瞬間に1回数える");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_ACTIVE, "Sample2後: Temp状態はACTIVE");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.captured, "Sample2後: 値域外でもフリーズフレームを記録する");
+    TEST_ASSERT_EQUAL_MESSAGE(0, dtc.freeze_frame.data.temperature, "Sample2後: フリーズフレームには生の値(0)が残る");
+
+    test_feed(&dtc, 50, 2000, 115);   /* Sample3: 値域外 → 危険（センサが戻ったが高温） */
+    test_feed(&dtc, 50, 2000, 255);   /* Sample4: 危険 → 値域外（オーバーヒート中にショート） */
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[SENSOR_TEMP].count, "Sample4後: 危険と値域外の間を移っても1回のまま");
+
+    test_feed(&dtc, 50, 2000, 80);    /* Sample5: 正常に戻る */
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_HISTORY, "Sample5後: 値域内の正常に戻るとHISTORY");
+    test_feed(&dtc, 50, 2000, 255);   /* Sample6: 再び値域外 */
+    TEST_ASSERT_EQUAL_MESSAGE(2, dtc.entries[SENSOR_TEMP].count, "Sample6後: 正常を挟んだ値域外は再発生として2回目");
+    TEST_ASSERT_EQUAL_MESSAGE(0, dtc.freeze_frame.data.temperature, "Sample6後: フリーズフレームは最初の1回のまま");
 }
 
 /* 非デフォルトのConfigDataを渡すと、デフォルトならNORMAL/WARNINGどまりの値でも
@@ -92,7 +164,7 @@ static void test_rpm_lifecycle_and_freeze_frame(void) {
     TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_ACTIVE, "Sample6後: RPM状態は再びACTIVE");
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.data.rpm == 5001, "Sample6後: フリーズフレームは最初のRPM=5001のまま上書きされない");
 
-    test_feed(&dtc, 50, 5700, 91);   /* Sample7: Tempも境界値+1でCRITICALになる（フリーズフレーム非上書きを確認） */
+    test_feed(&dtc, 50, 5700, 111);   /* Sample7: Tempも境界値+1でCRITICALになる（フリーズフレーム非上書きを確認） */
     TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].count == 1, "Sample7後: Temp発生回数が1");
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_RPM, "Sample7後: フリーズフレームの原因は依然RPM(上書きされない)");
 }
@@ -103,10 +175,10 @@ static void test_active_to_history_via_warning(void) {
     diag_init(&dtc);
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 正常値 */
-    test_feed(&dtc, 50, 2000, 91);   /* Sample2: Tempが境界値+1でCRITICALになる */
+    test_feed(&dtc, 50, 2000, 111);  /* Sample2: Tempが境界値+1でCRITICALになる */
     TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_ACTIVE, "Sample2後: Temp状態はACTIVE");
 
-    test_feed(&dtc, 50, 2000, 85);   /* Sample3: TempはWARNINGまでしか下がらない(NORMALには戻らない) */
+    test_feed(&dtc, 50, 2000, 105);  /* Sample3: TempはWARNINGまでしか下がらない(NORMALには戻らない) */
     TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_HISTORY,
           "Sample3後: WARNINGに下がっただけでもHISTORYに遷移する");
 }
@@ -117,7 +189,7 @@ static void test_freeze_frame_not_captured_without_critical(void) {
     diag_init(&dtc);
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 正常値 */
-    test_feed(&dtc, 90, 4500, 85);   /* Sample2: 全センサWARNINGまで(CRITICALには到達しない) */
+    test_feed(&dtc, 90, 4500, 105);  /* Sample2: 全センサWARNINGまで(CRITICALには到達しない) */
 
     TEST_ASSERT_FALSE_MESSAGE(dtc.freeze_frame.captured, "CRITICALが一度も発生しなければフリーズフレームは記録されない");
     TEST_ASSERT_TRUE_MESSAGE(
@@ -147,7 +219,7 @@ static void test_freeze_frame_tie_break_rpm_vs_temp(void) {
     diag_init(&dtc);
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 正常値 */
-    test_feed(&dtc, 50, 5001, 91);   /* Sample2: RPMとTempが境界値+1で同時にCRITICALになる */
+    test_feed(&dtc, 50, 5001, 111);  /* Sample2: RPMとTempが境界値+1で同時にCRITICALになる */
 
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_RPM,
           "RPM vs Temp同時発生: フリーズフレームの原因はRPM(配列の並び順が早い)");
@@ -160,6 +232,9 @@ int main(void) {
 
     RUN_TEST(test_status_boundary);
     RUN_TEST(test_status_check_custom_config);
+    RUN_TEST(test_status_out_of_range);
+    RUN_TEST(test_status_is_overheat);
+    RUN_TEST(test_dtc_counts_out_of_range);
     RUN_TEST(test_rpm_lifecycle_and_freeze_frame);
     RUN_TEST(test_active_to_history_via_warning);
     RUN_TEST(test_freeze_frame_not_captured_without_critical);

@@ -3,6 +3,7 @@
 #include "unity.h"
 #include "sensor.h"
 #include "fixture.h"
+#include "validate.h"   /* OPEN・SHORTの値が値域外であることを確かめるため */
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -281,6 +282,60 @@ static void test_temp_steps_do_not_change_apply(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == IGNITION_ON, "IGNITIONの読み込みに影響しない");
 }
 
+/* TEMP=OPEN・TEMP=SHORTは値域外の値（0・255）として入ることを確認する（Phase27） */
+static void test_apply_temp_open_and_short(void) {
+    VehicleSensorData data;
+    sensor_init(&data);
+    write_raw(TEST_FIXTURE_FILENAME, "MODE=FIXED\nTEMP=OPEN\n");
+    TEST_ASSERT_TRUE(fixture_apply(&data, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_EQUAL_MESSAGE(FIXTURE_TEMP_OPEN, data.temperature, "TEMP=OPEN: 断線の値(0)が入る");
+
+    write_raw(TEST_FIXTURE_FILENAME, "MODE=FIXED\nTEMP=SHORT\n");
+    TEST_ASSERT_TRUE(fixture_apply(&data, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_EQUAL_MESSAGE(FIXTURE_TEMP_SHORT, data.temperature, "TEMP=SHORT: 短絡の値(255)が入る");
+
+    /* 断線は値域の下、短絡は値域の上の外側であること（ECUが値域外として見分けられる前提） */
+    TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_TEMP, (int)FIXTURE_TEMP_OPEN), "OPENの値は値域外");
+    TEST_ASSERT_FALSE_MESSAGE(validate_in_range(SENSOR_TEMP, (int)FIXTURE_TEMP_SHORT), "SHORTの値は値域外");
+    TEST_ASSERT_TRUE_MESSAGE(FIXTURE_TEMP_OPEN < 25U, "OPENは低い側");
+    TEST_ASSERT_TRUE_MESSAGE(FIXTURE_TEMP_SHORT > 130U, "SHORTは高い側");
+}
+
+/* OPEN・SHORT以外の書き方（小文字・数値の0と255）と、TEMP以外のキーのOPENは無視することを確認する（Phase27） */
+static void test_apply_temp_open_short_strict(void) {
+    write_raw(TEST_FIXTURE_FILENAME,
+        "MODE=FIXED\n"
+        "TEMP=open\n"
+        "TEMP=Short\n"
+        "TEMP=0\n"
+        "TEMP=255\n"
+        "SPEED=OPEN\n");
+    VehicleSensorData data;
+    sensor_init(&data);   /* speed=0, rpm=800, temperature=25 */
+    TEST_ASSERT_TRUE(fixture_apply(&data, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_EQUAL_MESSAGE(25, data.temperature, "小文字や数値の0・255は値域外として無視し、初期値のまま");
+    TEST_ASSERT_EQUAL_MESSAGE(0, data.speed, "SPEED=OPENは数値でないため無視し、初期値のまま");
+}
+
+/* TEMP@N=OPEN・SHORTも、N秒目以降の水温として使えることを確認する（Phase27） */
+static void test_temp_steps_open_and_short(void) {
+    write_raw(TEST_FIXTURE_FILENAME,
+        "TEMP@3=OPEN\n"
+        "TEMP@5=80\n"
+        "TEMP@7=SHORT\n"
+        "TEMP@9=open\n");
+    FixtureTempSteps steps;
+    TEST_ASSERT_TRUE(fixture_load_temp_steps(&steps, TEST_FIXTURE_FILENAME));
+    TEST_ASSERT_EQUAL_MESSAGE(3, steps.count, "小文字のopenの行は無視し、3行読み込む");
+    uint8_t temp = 70U;
+    TEST_ASSERT_TRUE(fixture_temp_at(&steps, 3, &temp));
+    TEST_ASSERT_EQUAL_MESSAGE(FIXTURE_TEMP_OPEN, temp, "3秒目: 断線の値");
+    TEST_ASSERT_TRUE(fixture_temp_at(&steps, 5, &temp));
+    TEST_ASSERT_EQUAL_MESSAGE(80, temp, "5秒目: 正しい値に戻る");
+    TEST_ASSERT_TRUE(fixture_temp_at(&steps, 9, &temp));
+    TEST_ASSERT_EQUAL_MESSAGE(FIXTURE_TEMP_SHORT, temp, "9秒目: 短絡の値のまま（TEMP@9は無視）");
+}
+
 /* IGNITION@N行：N秒目より前は当てはまらず、N秒目以降は一番大きいNの状態になることを確認する（行の順番にはよらない） */
 static void test_ignition_steps_switch_by_sample(void) {
     write_raw(TEST_FIXTURE_FILENAME,
@@ -384,6 +439,9 @@ int main(void) {
     RUN_TEST(test_temp_steps_absent);
     RUN_TEST(test_temp_steps_max);
     RUN_TEST(test_temp_steps_do_not_change_apply);
+    RUN_TEST(test_apply_temp_open_and_short);
+    RUN_TEST(test_apply_temp_open_short_strict);
+    RUN_TEST(test_temp_steps_open_and_short);
     RUN_TEST(test_ignition_steps_switch_by_sample);
     RUN_TEST(test_ignition_steps_invalid_and_duplicate);
     RUN_TEST(test_ignition_steps_absent);

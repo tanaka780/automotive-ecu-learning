@@ -28,6 +28,8 @@ typedef enum {
 #define CAN_FAULT_BIT_SPEED 0x01U
 #define CAN_FAULT_BIT_RPM   0x02U
 #define CAN_FAULT_BIT_TEMP  0x04U
+/* 高温（オーバーヒート）の通知（Phase27）。センサの確定異常ではないので、センサのビットの後ろに置く */
+#define CAN_FAULT_BIT_OVERHEAT 0x08U
 
 /* ファン状態(data[0])のビット割り当て（Phase26） */
 #define CAN_FAN_BIT_ON 0x01U
@@ -59,11 +61,12 @@ typedef struct {
     uint8_t  temperature;
 } CanEngineStatus;
 
-/* 警告灯データの中身（センサ別の確定異常フラグ）。送信側はこれを詰め、受信側はこれに復元する */
+/* 警告灯データの中身（センサ別の確定異常フラグと、高温の通知）。送信側はこれを詰め、受信側はこれに復元する */
 typedef struct {
     bool fault_speed;
     bool fault_rpm;
     bool fault_temp;
+    bool overheat;   /* 水温が危険な高さ（Phase27）。水温センサの故障とは別に知らせる */
 } CanFaultStatus;
 
 /* 受信側が復元したファン状態（Phase26） */

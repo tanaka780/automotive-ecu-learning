@@ -8,14 +8,14 @@
 #include "sensor.h"   /* VehicleSensorData（フリーズフレーム用）と、SensorId（DtcEntry.sensor等で使用）を参照するために必要 */
 #include "dtc_status.h" /* DtcStatus を参照するために必要（Phase21、can_diag.cとの共通部分として切り出した） */
 
-/* DTC1件分の情報：どのセンサが、何回CRITICALに入ったか、現在の状態区分 */
+/* DTC1件分の情報：どのセンサが、何回異常（CRITICAL・値域外、Phase27）に入ったか、現在の状態区分 */
 typedef struct {
     SensorId  sensor;
     uint8_t   count;
     DtcStatus status;
 } DtcEntry;
 
-/* 最初にCRITICALが発生した瞬間の車両状態を1件だけ保持するフリーズフレーム */
+/* 最初に異常（CRITICAL・値域外）が発生した瞬間の車両状態を1件だけ保持するフリーズフレーム */
 typedef struct {
     VehicleSensorData data;           /* 発生時の全センサ値 */
     SensorId          trigger_sensor; /* 原因となったセンサ */
@@ -26,12 +26,12 @@ typedef struct {
 typedef struct {
     DtcEntry     entries[SENSOR_COUNT];
     SensorStatus previous;     /* 前回のSensorStatus（今回との比較に使う） */
-    FreezeFrame  freeze_frame; /* 最初のCRITICAL発生時のスナップショット */
+    FreezeFrame  freeze_frame; /* 最初の異常発生時のスナップショット */
 } DtcRecord;
 
 /* DTC記録を初期値（0件、状態区分はNONE、フリーズフレーム未記録）にリセットする */
 void diag_init(DtcRecord *dtc);
-/* 前回/今回のCRITICAL比較により、発生回数・ACTIVE/HISTORYの状態区分・フリーズフレームを更新する */
+/* 前回/今回の異常（CRITICAL・値域外）の比較により、発生回数・ACTIVE/HISTORYの状態区分・フリーズフレームを更新する */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data);
 /* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態(diag_initと同じ)に戻す */
 void diag_clear(DtcRecord *dtc);

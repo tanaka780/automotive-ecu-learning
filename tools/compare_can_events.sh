@@ -20,14 +20,14 @@
 
 set -u
 
-# *_coolは水温50℃（ファンのOFF閾値より低い）で通信を止める条件（Day57で追加）。TEMP=95の条件では
+# *_coolは水温50℃（ファンのOFF閾値より低い）で通信を止める条件（Day57で追加）。TEMP=115の条件では
 # ファンが最初から最後までONのままなので、受信途絶による強制ONが出力に現れない
 # drop_fanはファン制御ECU役のファン状態の送信を止める条件（Day57で追加）
 CONDITIONS="drop_engine drop_fault corrupt normal ign_off drop_engine_cool drop_fault_cool drop_fan"
 
 write_inputs() {
     local cond="$1" dir="$2"
-    local ign="ON" temp=95
+    local ign="ON" temp=115
     if [ "$cond" = "ign_off" ]; then
         ign="OFF"
     fi

@@ -15,9 +15,11 @@ static void test_diag_clear_resets_record(void) {
     DtcRecord dtc;
     diag_init(&dtc);
 
-    test_feed(&dtc, 101, 5001, 91);   /* 全センサをCRITICALにしてDTC・フリーズフレームを発生させる */
+    test_feed(&dtc, 101, 5001, 111);  /* 全センサをCRITICALにしてDTC・フリーズフレームを発生させる */
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.captured, "クリア前: フリーズフレームが記録されている");
     TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_SPEED].count == 1, "クリア前: Speedの発生回数が1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 1, "クリア前: RPMの発生回数が1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].count == 1, "クリア前: Tempの発生回数が1");
 
     diag_clear(&dtc);
 

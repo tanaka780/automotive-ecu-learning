@@ -25,7 +25,7 @@ FAN_FILL = "#E1F5EE"
 FAN_STROKE = "#0F6E56"
 FAN_TEXT = "#085041"
 
-FAN_ON_TEMP = 80   # fan_ctrl.hのFAN_ON_TEMPと同じ値（図の点線の位置だけに使う）
+FAN_ON_TEMP = 95   # fan_ctrl.hのFAN_ON_TEMPと同じ値（図の点線の位置だけに使う）
 
 # 図の寸法。横はプロット部分を秒数で等分する
 WIDTH = 720

@@ -18,18 +18,19 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sensor_sim_runner import SENSOR_SIM_VIRTUAL, run_sensor_sim
 
-# 70℃ → 4秒目80（ON閾値ちょうど） → 78・76（閾値の間） → 7秒目75（OFF閾値ちょうど） → 79（閾値の間） → 9秒目80。
-# 90℃を超えると水温センサの故障判定に入るので、90℃以下だけを使う
+# 70℃ → 4秒目95（ON閾値ちょうど） → 93・91（閾値の間） → 7秒目90（OFF閾値ちょうど） → 94（閾値の間） → 9秒目95。
+# 危険（110℃超）の警告や記録が混ざらないよう、110℃以下だけを使う
 HYSTERESIS_FIXTURE = (
     "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=70\n"
-    "TEMP@4=80\nTEMP@5=78\nTEMP@6=76\nTEMP@7=75\nTEMP@8=79\nTEMP@9=80\n"
+    "TEMP@4=95\nTEMP@5=93\nTEMP@6=91\nTEMP@7=90\nTEMP@8=94\nTEMP@9=95\n"
     "IGNITION=ON\n"
 )
 
-# 95℃で3秒目に故障確定 → 8秒目から78℃（閾値の間・正常範囲）で10秒目に復帰 → 14秒目から70℃（OFF閾値以下）
+# 100℃でファンが回っている → 3秒目に断線（値域外）して5秒目に故障確定 → 10秒目から93℃（閾値の間・正常範囲）で
+# 12秒目に復帰 → 14秒目から85℃（OFF閾値以下）
 SENSOR_FAULT_FIXTURE = (
-    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=95\n"
-    "TEMP@8=78\nTEMP@14=70\n"
+    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=100\n"
+    "TEMP@3=OPEN\nTEMP@10=93\nTEMP@14=85\n"
     "IGNITION=ON\n"
 )
 
@@ -69,7 +70,9 @@ def meter_value(samples, number, message, key):
         if line.startswith("[METER] " + message + "["):
             for item in line.split():
                 if item.startswith(key + "="):
-                    return int(item[len(key) + 1:])
+                    value = item[len(key) + 1:]
+                    # 水温センサの故障中、メーターは水温を"--"と表示する（Phase27）。その場合は文字のまま返す
+                    return int(value) if value.isdigit() else value
     return None
 
 
@@ -90,12 +93,12 @@ class FanHysteresisTest(unittest.TestCase):
 
     def test_temperature_follows_fixture(self):
         """前提：TEMP@N行どおりに、ファン制御ECUへ届く水温が変わる"""
-        expected = [70, 70, 70, 80, 78, 76, 75, 79] + [80] * 12
+        expected = [70, 70, 70, 95, 93, 91, 90, 94] + [95] * 12
         actual = [meter_value(self.samples, n, "EngineStatus", "temp") for n in range(1, 21)]
         self.assertEqual(expected, actual)
 
     def test_fan_switches_only_at_thresholds(self):
-        """ON閾値(80)の4秒目でON、OFF閾値(75)の7秒目でOFF、再びON閾値の9秒目でON。それ以外では切り替わらない"""
+        """ON閾値(95)の4秒目でON、OFF閾値(90)の7秒目でOFF、再びON閾値の9秒目でON。それ以外では切り替わらない"""
         self.assertEqual({4: "[FAN] Fan ON (temp)", 7: "[FAN] Fan OFF", 9: "[FAN] Fan ON (temp)"}, self.events)
 
     def test_meter_shows_fan_state_one_sample_later(self):
@@ -105,7 +108,7 @@ class FanHysteresisTest(unittest.TestCase):
         self.assertEqual(expected, actual)
 
     def test_no_sensor_fault(self):
-        """前提：90℃以下なので水温センサの故障判定は出ず、通信の途絶も記録されない"""
+        """前提：値域内の値だけなので水温センサの故障判定は出ず、通信の途絶も記録されない"""
         self.assertFalse([line for line in self.lines if line.startswith("[FAULT]")])
         for line in self.lines:
             if line.startswith("[FAN-DTC]") or line.startswith("[CAN-DTC]"):
@@ -128,32 +131,39 @@ class FanSensorFaultTest(unittest.TestCase):
         self.assertEqual(list(range(1, 21)), sorted(self.samples))
 
     def test_degraded_and_recovered(self):
-        """前提：95℃が3回続いた3秒目に確定し、78℃が3回続いた10秒目に復帰する"""
-        self.assertIn("[FAULT] Degraded: Temp", self.samples[3])
-        self.assertIn("[FAULT] Recovered: Temp", self.samples[10])
+        """前提：断線（値域外）が3回続いた5秒目に確定し、値域内の93℃が3回続いた12秒目に復帰する"""
+        self.assertIn("[FAULT] Degraded: Temp", self.samples[5])
+        self.assertIn("[FAULT] Recovered: Temp", self.samples[12])
 
-    def test_substituted_temperature_is_sent(self):
-        """前提：確定中（3〜9秒目）は、ファン制御ECUへ届く水温がフェイルセーフ値(25)に差し替わる"""
-        expected = [95, 95] + [25] * 7 + [78] * 4 + [70] * 7
+    def test_meter_hides_temperature_while_degraded(self):
+        """確定中（5〜11秒目）は、ゲージデータの水温がフェイルセーフ値(25)に差し替わるため、
+        メーターは水温を「--」と表示する（Phase27）。確定前の3・4秒目にメーターへ届く水温は、
+        断線の値(0)ではなく、直前の100℃のまま"""
+        expected = [100] * 4 + ["--"] * 7 + [93] * 2 + [85] * 7
         actual = [meter_value(self.samples, n, "EngineStatus", "temp") for n in range(1, 21)]
         self.assertEqual(expected, actual)
 
+    def test_open_value_not_used_in_stats(self):
+        """確定前の3・4秒目の断線の値(0)は統計に入らず、直前の100℃として数える（Phase27）。
+        100が4回・25が7回・93が2回・85が7回で、最小25・最大100・平均67"""
+        self.assertIn("Temp : min= 25  max=100  avg= 67 C", self.lines)
+
     def test_temp_fault_bit_follows_degraded_and_recovered(self):
-        """ファン制御ECUへ届く警告灯データの水温ビットは、確定した3サンプル目から1になり、
-        復帰した10サンプル目から0に戻る（どのサンプルも、その秒に届いたビットはすべて同じ値）。
+        """ファン制御ECUへ届く警告灯データの水温ビットは、確定した5サンプル目から1になり、
+        復帰した12サンプル目から0に戻る（どのサンプルも、その秒に届いたビットはすべて同じ値）。
         回復で0に戻ることは、ファンが14サンプル目に止まることでも間接的に分かるが、
         ファンの判断に頼らず、main.cが送る中身を直接確かめるために置く"""
-        expected = [0, 0] + [1] * 7 + [0] * 11
+        expected = [0] * 4 + [1] * 7 + [0] * 9
         actual = []
         for n in range(1, 21):
-            bits = {line.split("temp=")[1] for line in self.samples[n]
+            bits = {line.split("temp=")[1].split()[0] for line in self.samples[n]
                     if line.startswith("[METER] FaultStatus[")}
             actual.append(int(bits.pop()) if len(bits) == 1 else bits)
         self.assertEqual(expected, actual)
 
     def test_fan_not_turned_off_by_substituted_temperature(self):
-        """1秒目に95℃でONになり、確定中も、閾値の間の78℃で復帰した後もOFFにしない。
-        OFFになるのは、OFF閾値以下の70℃になった14秒目だけ"""
+        """1秒目に100℃でONになり、断線中も確定中も、閾値の間の93℃で復帰した後もOFFにしない。
+        OFFになるのは、OFF閾値以下の85℃になった14秒目だけ"""
         self.assertEqual({1: "[FAN] Fan ON (temp)", 14: "[FAN] Fan OFF"}, self.events)
 
     def test_meter_shows_fan_on_until_temperature_drops(self):
@@ -169,9 +179,9 @@ class FanSensorFaultTest(unittest.TestCase):
                 self.assertIn("NONE", line)
 
 
-# 85℃のまま、5秒目にエンジンを切り、8秒目にかけ直す（IGNITION@N行）
+# 97℃（ファンON閾値以上・注意の閾値以下）のまま、5秒目にエンジンを切り、8秒目にかけ直す（IGNITION@N行）
 ENGINE_RESTART_FIXTURE = (
-    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=85\n"
+    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=97\n"
     "IGNITION=ON\nIGNITION@5=OFF\nIGNITION@8=ON\n"
 )
 
@@ -218,6 +228,50 @@ class EngineRestartTest(unittest.TestCase):
         for line in self.lines:
             if line.startswith("[FAN-DTC]") or line.startswith("[CAN-DTC]"):
                 self.assertIn("NONE", line)
+
+
+# 最初から断線（値域外）→ 3秒目に故障確定 → 8秒目に100℃（ON閾値以上）で直り10秒目に復帰
+START_OPEN_FIXTURE = (
+    "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=OPEN\n"
+    "TEMP@8=100\n"
+    "IGNITION=ON\n"
+)
+
+
+class FanHoldAfterSensorFaultTest(unittest.TestCase):
+    """故障の前の要求がOFFのまま故障し、高温で直る場合も、復帰の瞬間にファンを止めない（Phase27）。
+    水温センサの確定異常の解除は、解除後の水温より先に届く。使える水温が決まるまではONを保つ"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result = run_sensor_sim({"fixture.txt": START_OPEN_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.lines = cls.result.stdout.splitlines()
+        cls.samples = split_samples(cls.lines)
+        cls.events = fan_events(cls.samples)
+
+    def test_runs_to_the_end(self):
+        """前提：20サンプル最後まで実行され、終了コードは0"""
+        self.assertEqual(0, self.result.returncode)
+        self.assertEqual(list(range(1, 21)), sorted(self.samples))
+
+    def test_degraded_and_recovered(self):
+        """前提：断線が3回続いた3秒目に確定し、値域内の100℃が3回続いた10秒目に復帰する"""
+        self.assertIn("[FAULT] Degraded: Temp", self.samples[3])
+        self.assertIn("[FAULT] Recovered: Temp", self.samples[10])
+
+    def test_fan_not_stopped_at_recovery(self):
+        """ファンは3秒目に水温センサの故障でONになり、最後まで一度も止まらない
+        （復帰の10秒目に、故障の前の要求(OFF)で止めない）"""
+        self.assertEqual({3: "[FAN] Fan ON (temp sensor fault)"}, self.events)
+
+    def test_meter_shows_fan_on_after_fault(self):
+        """メーターには、1・2秒目はOFF、ONになった3秒目から最後までONが届き、復帰の10秒目もOFFにならない
+        （仮想時間版では、確定の秒に警告灯データを受けてファンの出力を決めた後でファン状態を送るので、同じ秒に届く。
+        実時間版では、タスクの遅れが周期ごとに積み重なり（timer_is_dueは実行した時刻から次の周期を数える）、
+        200ms周期の警告灯データの受信がファン状態の送信より後になるため、4回動かしたところ、どれも4秒目に届いた）"""
+        expected = [0] * 2 + [1] * 18
+        actual = [meter_value(self.samples, n, "FanStatus", "fan") for n in range(1, 21)]
+        self.assertEqual(expected, actual)
 
 
 if __name__ == "__main__":

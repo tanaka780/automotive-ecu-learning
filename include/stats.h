@@ -15,7 +15,7 @@ typedef struct {
 
     uint8_t  temp_min;    /* 水温の最小値 [℃] */
     uint8_t  temp_max;    /* 水温の最大値 [℃] */
-    uint16_t temp_sum;    /* 水温の合計: 最大 20×100=2,000 → uint16_t で十分 */
+    uint16_t temp_sum;    /* 水温の合計: 最大 20×255=5,100（uint8_tの最大値で見積もる） → uint16_t で十分 */
 
     uint8_t  count;       /* 記録したサンプル数: 最大 20 → uint8_t（最大 255）で十分 */
 } VehicleStats;

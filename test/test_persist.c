@@ -40,7 +40,9 @@ static void test_round_trip(void) {
     test_feed(&dtc, 50, 2000, 50);    /* Sample1: 正常値 */
     test_feed(&dtc, 50, 5001, 50);    /* Sample2: RPMがCRITICALになる（フリーズフレーム記録） */
     test_feed(&dtc, 50, 2000, 50);    /* Sample3: RPMがNORMALに戻る → HISTORYへ遷移 */
-    test_feed(&dtc, 101, 2000, 91);   /* Sample4: SpeedとTempが同時にCRITICALになる */
+    test_feed(&dtc, 101, 2000, 111);  /* Sample4: SpeedとTempが同時にCRITICALになる */
+    /* 閾値を変えたときに、Tempが記録されないまま保存・読み込みの一致だけが通ってしまわないよう、前提を確かめる */
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].count == 1, "前提: Tempも記録されている");
 
     persist_save_dtc(&dtc, TEST_PERSIST_FILENAME);
 

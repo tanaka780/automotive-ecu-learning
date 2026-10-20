@@ -15,8 +15,30 @@ typedef struct {
     VehicleSensorData data;
 } FixtureValues;
 
+/* TEMP=・TEMP@N=の値を解釈し、有効ならtemperatureに入れてtrueを返す（Phase27）。
+   OPEN・SHORTはセンサの断線・短絡を再現するため、値域外の値（0・255）をそのまま入れる。
+   それ以外は数値に変換でき、値域内のときだけ有効とする（OPEN・SHORTはMODEと同じく大文字で厳密に比べる） */
+static bool fixture_temp_value(const char *str_value, uint8_t *temperature) {
+    int value;
+
+    if (strcmp(str_value, "OPEN") == 0) {
+        *temperature = FIXTURE_TEMP_OPEN;
+        return true;
+    }
+    if (strcmp(str_value, "SHORT") == 0) {
+        *temperature = FIXTURE_TEMP_SHORT;
+        return true;
+    }
+    if ((sscanf(str_value, "%d", &value) != 1) || (!validate_in_range(SENSOR_TEMP, value))) {
+        return false;
+    }
+    *temperature = (uint8_t)value;
+    return true;
+}
+
 /* "KEY=VALUE" の1行を解釈する。
-   MODEキーは文字列として比較し、SPEED/RPM/TEMPは数値に変換できた場合だけ反映する。
+   MODEキーは文字列として比較し、TEMPはfixture_temp_valueで解釈し（OPEN・SHORTも使える）、
+   SPEED/RPMは数値に変換できた場合だけ反映する。
    未知のキー・値欠落・数値に変換できない行・値域外の値は無視する（config.cのapply_lineと同じ考え方）。
    値域チェックはconfig.cと同じvalidate_in_range（validate.h）を使い、int型のまま検証してから
    uint8_t/uint16_tへキャストする */
@@ -35,6 +57,10 @@ static void fixture_apply_line(FixtureValues *fv, const char *line) {
         fv->mode_fixed = (strcmp(str_value, "FIXED") == 0);
         return;
     }
+    if (strcmp(key, "TEMP") == 0) {
+        (void)fixture_temp_value(str_value, &fv->data.temperature);   /* 無効な値なら変えない */
+        return;
+    }
 
     if (sscanf(str_value, "%d", &int_value) != 1) {
         return;   /* 数値に変換できない値は無視する */
@@ -47,10 +73,6 @@ static void fixture_apply_line(FixtureValues *fv, const char *line) {
     } else if (strcmp(key, "RPM") == 0) {
         if (validate_in_range(SENSOR_RPM, int_value)) {
             fv->data.rpm = (uint16_t)int_value;
-        }
-    } else if (strcmp(key, "TEMP") == 0) {
-        if (validate_in_range(SENSOR_TEMP, int_value)) {
-            fv->data.temperature = (uint8_t)int_value;
         }
     } else {
         /* 未知のキーは無視する */
@@ -141,12 +163,11 @@ bool fixture_load_ignition(IgnitionState *state, const char *filename) {
 
 /* "TEMP@N=値" の1行を解釈し、有効ならfrom_sample・temperatureに入れてtrueを返す。
    キーは"TEMP@"の直後に整数だけが続くものに限り（%cで余分な文字が残っていないかを見る）、Nは1以上とする。
-   値はTEMP=と同じく、数値に変換できない・値域外なら無視する */
+   値はTEMP=と同じくfixture_temp_valueで解釈する（OPEN・SHORTも使える） */
 static bool fixture_temp_step_line(const char *line, int *from_sample, uint8_t *temperature) {
     char key[FIXTURE_LINE_SIZE];
     char str_value[FIXTURE_LINE_SIZE];
     int  n;
-    int  value;
     char extra;
 
     if (sscanf(line, "%63[^=]=%63s", key, str_value) != 2) {
@@ -155,12 +176,11 @@ static bool fixture_temp_step_line(const char *line, int *from_sample, uint8_t *
     if ((sscanf(key, "TEMP@%d%c", &n, &extra) != 1) || (n < 1)) {
         return false;
     }
-    if ((sscanf(str_value, "%d", &value) != 1) || (!validate_in_range(SENSOR_TEMP, value))) {
+    if (!fixture_temp_value(str_value, temperature)) {
         return false;
     }
 
     *from_sample = n;
-    *temperature = (uint8_t)value;
     return true;
 }
 
