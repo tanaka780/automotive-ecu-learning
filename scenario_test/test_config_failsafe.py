@@ -19,8 +19,8 @@ DEFAULT_CONFIG_LINE = (
     "StatusCrit(speed=100,rpm=5000,temp=110)"
 )
 
-# 値が11個揃った、DTC0件のdtc_data.txt（persist.cの保存形式）
-VALID_DTC_DATA = "0\n" * 11
+# 値が13個揃った、DTC0件のdtc_data.txt（persist.cの保存形式。Phase28で記録を4種にし、11個から13個にした）
+VALID_DTC_DATA = "0\n" * 13
 
 # 全行が反映されないconfig.txt（数値でない値・"="の無い行・値域外の値）
 BROKEN_CONFIG = "ALERT_SPEED_MAX=abc\nGARBAGE\nSTATUS_TEMP_CRIT=999\n"

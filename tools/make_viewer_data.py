@@ -24,9 +24,9 @@ DATA_START = "<!-- DATA-START"   # index.htmlの中で、データを書き込�
 DATA_END = "<!-- DATA-END -->"
 
 # どの場面にも置く、正常な設定ファイルと、記録が0件の記録ファイル（起動時の自己点検を合格させるため）。
-# 記録ファイルの並びはpersist.cのdtc_to_textと同じ（センサー3つ×回数・状態区分、フリーズフレーム5つ）
+# 記録ファイルの並びはpersist.cのdtc_to_textと同じ（記録4つ×回数・状態区分、フリーズフレーム5つ。Phase28で11個から13個にした）
 CONFIG_OK = "LOG_LEVEL=0\n"
-DTC_EMPTY = "0\n" * 11
+DTC_EMPTY = "0\n" * 13
 # 全行が反映されない設定ファイル（scenario_test/test_config_failsafe.pyのBROKEN_CONFIGと同じ）
 BROKEN_CONFIG = "ALERT_SPEED_MAX=abc\nGARBAGE\nSTATUS_TEMP_CRIT=999\n"
 
@@ -56,7 +56,7 @@ SCENARIOS = [
      "condition": "温度を70℃→4秒目100℃→7秒目に配線が切れる（0℃）→13秒目91℃→16秒目80℃に変える。",
      "files": {"fixture.txt": open(os.path.join(REPO_ROOT, "tools", "fan_run_example_fixture.txt")).read()},
      "expect": [("sec", 7, "温度がありえない値"), ("sec", 9, "温度のありえない値が3回続いた"), ("sec", 9, "温度を「--」と表示"),
-                ("sec", 15, "温度がありうる値に戻った"), ("sec", 16, "ファンを止めた"), ("end", None, "温度の記録：過去に異常")]},
+                ("sec", 15, "温度がありうる値に戻った"), ("sec", 16, "ファンを止めた"), ("end", None, "温度センサーの記録：過去に異常")]},
     {"id": "overheat", "group": "main", "title": "オーバーヒート", "tagline": "本当の高温を知らせる",
      "situation": "重い荷物を積んで坂道を登り続け、エンジンが本当に熱くなる。温度センサーは壊れていない。",
      "anomaly": "温度が危険な高さ（110℃超え）になる。",
@@ -64,7 +64,7 @@ SCENARIOS = [
      "condition": "温度を70℃→4秒目100℃→7秒目118℃→13秒目91℃→16秒目80℃に変える。",
      "files": {"fixture.txt": fixture(extra="TEMP@4=100\nTEMP@7=118\nTEMP@13=91\nTEMP@16=80\n")},
      "expect": [("sec", 4, "ファンを回し始めた"), ("sec", 7, "温度が危険な値"), ("sec", 7, "メーター：高温の警告を表示"),
-                ("sec", 13, "メーター：高温の警告を消した"), ("sec", 16, "ファンを止めた"), ("end", None, "温度の記録：過去に異常")]},
+                ("sec", 13, "メーター：高温の警告を消した"), ("sec", 16, "ファンを止めた"), ("end", None, "オーバーヒートの記録：過去に異常")]},
     {"id": "comm", "group": "main", "title": "通信の途切れ", "tagline": "連絡が届かなくても安全側に動く",
      "situation": "エンジンの見張り役の不具合で、「速度・回転数・温度」の連絡だけが送られてこなくなる。",
      "anomaly": "「速度・回転数・温度」の連絡が届かない。",
@@ -82,7 +82,7 @@ SCENARIOS = [
      "files": {"fixture.txt": fixture(temp="SHORT", speed=110)},
      "expect": [("sec", 1, "速度が危険な値"), ("sec", 1, "温度がありえない値"),
                 ("sec", 3, "速度の危険な値が3回続いた"), ("sec", 3, "温度のありえない値が3回続いた"),
-                ("end", None, "速度の記録：今も異常"), ("end", None, "温度の記録：今も異常")]},
+                ("end", None, "速度の記録：今も異常"), ("end", None, "温度センサーの記録：今も異常")]},
     {"id": "overheat_fault", "group": "other", "title": "オーバーヒート中の温度センサーの異常",
      "situation": "エンジンが本当に熱くなっている途中で、温度センサーの配線がつながってしまい（ショート）、ありえない値（255℃）を出す。しばらくして直る。",
      "anomaly": "温度が危険な高さ（115℃）の途中で、温度センサーがありえない値になる。",
@@ -188,25 +188,28 @@ SCENARIOS = [
      "files": {"fixture.txt": fixture(ign="OFF")},
      "keep_dtc": True,
      "stdin": "clear\n",
-     "dtc_after": [(4, "0", "温度の記録は消えている")],
+     "dtc_after": [(4, "0", "温度センサーの記録は消えている")],
      "expect": [("start", None, "前回の記録を読み込んだ"), ("end", None, "受け付ける"), ("end", None, "故障の記録を消した")]},
     {"id": "inspection_one", "group": "other", "title": "点検でセンサー1つ分だけ消す",
      "situation": "修理したのは温度センサーだけなので、整備士がその記録だけを消す。",
      "anomaly": "異常ではない（センサーごとに記録を消す操作の確認）。",
-     "response": "エンジンが切れているときだけ点検用のコマンドを受け付け、「clear temp」で温度の記録だけを消す。ほかのセンサーの記録は残す。",
-     "condition": "速度110km/h・温度センサーの配線が切れた状態（0℃）で1回動かして2つの記録を残した後、エンジンを切ったまま起動し、最後に「clear temp」を入力する（この画面は2回目）。",
-     "pre": {"fixture.txt": fixture(temp="OPEN", speed=110)},
+     "response": "エンジンが切れているときだけ点検用のコマンドを受け付け、「clear temp」で温度の記録（温度センサーの故障とオーバーヒートの2つ）だけを消す。ほかのセンサーの記録は残す。",
+     "condition": "速度110km/h・温度115℃（オーバーヒート）→4秒目に温度センサーの配線が切れる（0℃）で1回動かして3つの記録を残した後、エンジンを切ったまま起動し、最後に「clear temp」を入力する（この画面は2回目）。",
+     "pre": {"fixture.txt": fixture(temp=115, speed=110, extra="TEMP@4=OPEN\n")},
      "files": {"fixture.txt": fixture(ign="OFF")},
      "keep_dtc": True,
      "stdin": "clear temp\n",
      # 終了時の一覧は消す前に表示されるので、消した結果は終了後の記録ファイルで確かめる
-     # （並びはpersist.cのdtc_to_textと同じ：1行目が速度、5行目が温度の異常になった回数）
-     "dtc_after": [(0, "1", "速度の記録は残っている"), (4, "0", "温度の記録は消えている")],
+     # （並びはpersist.cのdtc_to_textと同じ：1行目が速度、5行目が温度センサーの故障、7行目がオーバーヒートの回数）
+     "dtc_after": [(0, "1", "速度の記録は残っている"), (4, "0", "温度センサーの記録は消えている"),
+                   (6, "0", "オーバーヒートの記録も消えている")],
      "expect": [("start", None, "前回の記録を読み込んだ"), ("end", None, "受け付ける"),
                 ("end", None, "温度の記録だけを消した")]},
 ]
 
 SENSOR_NAMES = {"Speed": "速度", "RPM": "回転数", "Temp": "温度"}
+# 記録の種類の表示名（diag.cのdtc_nameと同じ並び、Phase28）
+DTC_NAMES = {"Speed": "速度", "RPM": "回転数", "TempSensor": "温度センサー", "Overheat": "オーバーヒート"}
 MESSAGE_NAMES = {"EngineStatus": "速度・回転数・温度", "FaultStatus": "警告灯", "FanStatus": "ファンの状態"}
 START_TEXTS = {
     "[CONFIG] No config file (using defaults)": "設定ファイルが無い → 決めてある値で動く",
@@ -435,15 +438,14 @@ def parse(lines):
 
 def record_text(line):
     """終了時の記録の行を、画面に出す日本語にする。表示しない行はNoneを返す。"""
-    # 記録は、危険な値とありえない値のどちらに入っても数える（Phase27）。センサーの故障とオーバーヒートは
-    # 同じ記録に数えるため（分けるのは次のテーマ）、「センサー」ではなく「温度の記録」のように書く
-    m = re.match(r"\[DTC\] (\w+)\s+(\w+)\s+CRITICAL occurrences: (\d+)", line)
+    # 記録は種類ごと（Phase28）。温度は、温度センサーの故障とオーバーヒートを別の記録にしている
+    m = re.match(r"\[DTC\] (\w+)\s+(\w+)\s+occurrences: (\d+)", line)
     if m:
         state = {"NONE": "記録なし", "ACTIVE": "今も異常", "HISTORY": "過去に異常（今は正常）"}[m.group(2)]
-        return f"{SENSOR_NAMES[m.group(1)]}の記録：{state}・異常になった回数 {m.group(3)}"
+        return f"{DTC_NAMES[m.group(1)]}の記録：{state}・異常になった回数 {m.group(3)}"
     m = re.match(r"\[DTC\] Freeze Frame \(trigger: (\w+)\) Speed:\s*(\d+) km/h RPM:\s*(\d+) Temp:\s*(\d+) C", line)
     if m:
-        return (f"最初に異常になった瞬間の状態（{SENSOR_NAMES[m.group(1)]}）：速度 {m.group(2)}km/h・"
+        return (f"最初に異常になった瞬間の状態（{DTC_NAMES[m.group(1)]}）：速度 {m.group(2)}km/h・"
                 f"回転数 {m.group(3)}・温度 {m.group(4)}℃")
     m = re.match(r"\[(CAN|FAN)-DTC\] (\w+)\s+(\w+)\s+link lost occurrences: (\d+)", line)
     if m and m.group(3) != "NONE":

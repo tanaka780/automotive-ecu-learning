@@ -105,8 +105,11 @@ static void run_sample_cycle(void *context) {
         sensor_print(ctx->sensor_data);                   /* センサ値を表示する (読む) */
         status_check(ctx->sensor_status, ctx->sensor_data, ctx->config); /* 状態レベルを判定する */
         status_print(ctx->sensor_status);                 /* 状態レベルを表示する (読む) */
-        diag_check(ctx->dtc, ctx->sensor_status, ctx->sensor_data); /* 異常（CRITICAL・値域外）に入った瞬間をDTCとして記録する */
         faultmgr_check(ctx->fault_mgr, ctx->sensor_status, ctx->sensor_data); /* 確定した異常(Degraded)・復帰(Recovery)を判定し、値域内だった直前の値を覚える */
+        /* 異常に入った瞬間をDTCとして記録する。オーバーヒートの記録は、高温の通知と同じく判断に使える水温で決めるため、
+           それを更新するfaultmgr_checkの後に呼ぶ（Phase28。diag_checkはログを出さないので、出力の並びは変わらない） */
+        bool overheat = status_is_overheat(faultmgr_usable_temperature(ctx->fault_mgr), ctx->config);
+        diag_check(ctx->dtc, ctx->sensor_status, ctx->sensor_data, overheat);
 
         /* diag_check/status_checkは常にraw(sensor_data)を見て診断の正確性を保つ。
            Degraded中のセンサはeffective_data側だけフェイルセーフ値に差し替え（確定前の値域外は直前の値域内の値に差し替え、Phase27）、
@@ -205,7 +208,7 @@ int main(void) {
 
     SensorStatus sensor_status;     /* 状態レベル（status_check が毎回上書き、初期化不要） */
 
-    DtcRecord dtc;                  /* DTC記録（センサ別の異常の発生回数、前回状態を内部に保持） */
+    DtcRecord dtc;                  /* DTC記録（記録の種類ごとの異常の発生回数、前回の異常の有無を内部に保持） */
     diag_init(&dtc);
     bool dtc_ok = persist_load_dtc(&dtc, PERSIST_DTC_FILENAME);
     /* 保存ファイルが無い/壊れている場合もdiag_initの初期値のまま継続する（フェイルセーフ）。詳細はpersist.c内のログ参照 */

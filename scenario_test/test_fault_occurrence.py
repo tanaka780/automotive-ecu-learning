@@ -1,7 +1,7 @@
 """故障発生（docs/scenarios.md）の結合テスト。
 
 fixture.txtでセンサ値とイグニッション（ON）を固定し、sensor_simを外から実行して期待結果と照合する。
-`make scenario`で実行する。1条件につきsensor_simを最後まで1回動かすため、約20秒×条件数かかる。
+`make scenario`で実行する。1条件につきsensor_simを最後まで1回動かす（本番版の条件は約20秒、仮想時間版の条件は数ミリ秒）。
 
 このテストでは値を最後まで固定し、1サンプル目から最後まで異常（CRITICAL・値域外）が続く形で再現する。シナリオの流れのうち
 「正常範囲で数回更新される」「正常範囲に戻る」「Ignition OFF」と、期待結果のうち「NORMALが3回連続すると
@@ -13,7 +13,7 @@ test_meter_shows_failsafe_value_and_fault_bitとtest_only_faulty_sensors_use_fai
 エンジン監視ECUが送るCANの値（フェイルセーフ値・故障ビット）を確かめる手段が他に無いため残した。
 3ECU化でメーターが別のプロセスになると、この2つは見直しが必要になる。
 
-RpmSensorFaultTestだけは、仮想時間版（sensor_sim_virtual）で実行する。確かめたいのは、main.cが故障確定の状態から
+RpmSensorFaultTestは、仮想時間版（sensor_sim_virtual）で実行する。確かめたいのは、main.cが故障確定の状態から
 警告灯データの中身を作る配線で、本番版と同じコードのため。仮想時間版は出力が毎回同じで、数ミリ秒で終わる。
 
 Phase27で、水温は危険（CRITICAL）が続いても故障と確定せず、値域外（断線・ショート）が続いたときに確定する決まりに
@@ -89,9 +89,10 @@ class SingleSensorFaultTest(unittest.TestCase):
 
     def test_dtc_recorded_once_as_active(self):
         """該当センサのDTC発生回数が1件記録され、状態区分がACTIVEになる（他のセンサは記録されない）"""
-        self.assertIn("[DTC] Speed ACTIVE   CRITICAL occurrences: 1", self.lines)
-        self.assertIn("[DTC] RPM   NONE     CRITICAL occurrences: 0", self.lines)
-        self.assertIn("[DTC] Temp  NONE     CRITICAL occurrences: 0", self.lines)
+        self.assertIn("[DTC] Speed      ACTIVE   occurrences: 1", self.lines)
+        self.assertIn("[DTC] RPM        NONE     occurrences: 0", self.lines)
+        self.assertIn("[DTC] TempSensor NONE     occurrences: 0", self.lines)
+        self.assertIn("[DTC] Overheat   NONE     occurrences: 0", self.lines)
 
     def test_freeze_frame_has_raw_values(self):
         """最初にCRITICALが発生した瞬間の全センサ値（生の値）がフリーズフレームとして記録される"""
@@ -142,11 +143,13 @@ class MultiSensorFaultTest(unittest.TestCase):
         self.assertEqual(list(range(1, 21)), sorted(self.samples))
 
     def test_both_sensors_recorded_as_dtc(self):
-        """車速は危険、水温は値域外と、理由が違っても、両方ともDTCとして記録される"""
+        """車速は危険、水温は値域外と、理由が違っても、両方ともDTCとして記録される。
+        水温の値域外は、オーバーヒートではなく水温センサの故障の記録になる（Phase28）"""
         self.assertIn("[STATUS] Speed: CRITICAL | RPM: NORMAL   | Temp: OUTRANGE", self.samples[1])
-        self.assertIn("[DTC] Speed ACTIVE   CRITICAL occurrences: 1", self.lines)
-        self.assertIn("[DTC] Temp  ACTIVE   CRITICAL occurrences: 1", self.lines)
-        self.assertIn("[DTC] RPM   NONE     CRITICAL occurrences: 0", self.lines)
+        self.assertIn("[DTC] Speed      ACTIVE   occurrences: 1", self.lines)
+        self.assertIn("[DTC] TempSensor ACTIVE   occurrences: 1", self.lines)
+        self.assertIn("[DTC] Overheat   NONE     occurrences: 0", self.lines)
+        self.assertIn("[DTC] RPM        NONE     occurrences: 0", self.lines)
 
     def test_freeze_frame_trigger_is_earlier_sensor(self):
         """フリーズフレームの原因は、配列の並び順（speed→rpm→temp）が早い方のSpeedになる"""
@@ -248,9 +251,11 @@ class TempOverheatTest(unittest.TestCase):
             self.assertTrue(line.endswith("speed=0 rpm=0 temp=0 overheat=1"), line)
 
     def test_dtc_and_stats_use_real_value(self):
-        """DTCは危険に入った瞬間に1回記録され、統計も本当の水温で集計される"""
-        self.assertIn("[DTC] Temp  ACTIVE   CRITICAL occurrences: 1", self.lines)
-        self.assertIn("[DTC] Freeze Frame (trigger: Temp) Speed: 50 km/h RPM:2000 Temp:115 C", self.lines)
+        """DTCは危険に入った瞬間に、水温センサの故障ではなくオーバーヒートの記録として1回記録され（Phase28）、
+        統計も本当の水温で集計される"""
+        self.assertIn("[DTC] Overheat   ACTIVE   occurrences: 1", self.lines)
+        self.assertIn("[DTC] TempSensor NONE     occurrences: 0", self.lines)
+        self.assertIn("[DTC] Freeze Frame (trigger: Overheat) Speed: 50 km/h RPM:2000 Temp:115 C", self.lines)
         self.assertIn("Temp : min=115  max=115  avg=115 C", self.lines)
 
     def test_fan_on_by_real_temperature(self):
@@ -319,6 +324,13 @@ class OverheatThenSensorFaultTest(unittest.TestCase):
         fan_lines = [line for line in self.lines if line.startswith("[FAN] Fan")]
         self.assertEqual(["[FAN] Fan ON (temp)"], fan_lines)
 
+    def test_records_kept_separately(self):
+        """記録は2つに分かれる。オーバーヒートは、判断に使える水温（ショート中も壊れる前の115℃）で決めるので、
+        ショートを挟んでもACTIVEのまま1回。水温センサの故障は、ショートで1回数え、直ったのでHISTORY（Phase28）"""
+        self.assertIn("[DTC] Overheat   ACTIVE   occurrences: 1", self.lines)
+        self.assertIn("[DTC] TempSensor HISTORY  occurrences: 1", self.lines)
+        self.assertIn("[DTC] Freeze Frame (trigger: Overheat) Speed: 50 km/h RPM:2000 Temp:115 C", self.lines)
+
 
 # 115℃（オーバーヒート）→ 5秒目に100℃（危険の閾値以下・注意）へ下がる
 OVERHEAT_CLEARS_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=115\nTEMP@5=100\nIGNITION=ON\n"
@@ -344,6 +356,27 @@ class OverheatClearsTest(unittest.TestCase):
             actual.append(int(bits.pop()) if len(bits) == 1 else bits)
         self.assertEqual(expected, actual)
         self.assertFalse([line for line in self.lines if line.startswith("[FAULT]")])
+
+
+# 70℃ → 3秒目だけ115℃（オーバーヒート） → 4秒目から70℃
+OVERHEAT_ONE_SECOND_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=70\nTEMP@3=115\nTEMP@4=70\nIGNITION=ON\n"
+
+
+class OverheatOneSecondTest(unittest.TestCase):
+    """オーバーヒートが1秒だけのとき、その秒のうちに記録する（仮想時間版、Phase28）。
+    記録の確認は、判断に使える水温を更新する故障確定の後に呼ぶ。順番が逆だと1秒遅れて、
+    フリーズフレームに次の秒の70℃が残る"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.result = run_sensor_sim({"fixture.txt": OVERHEAT_ONE_SECOND_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.lines = cls.result.stdout.splitlines()
+
+    def test_recorded_in_the_overheat_second(self):
+        """フリーズフレームは115℃の秒のもので、オーバーヒートは1回記録され、今は正常（HISTORY）"""
+        self.assertEqual(0, self.result.returncode)
+        self.assertIn("[DTC] Freeze Frame (trigger: Overheat) Speed: 50 km/h RPM:2000 Temp:115 C", self.lines)
+        self.assertIn("[DTC] Overheat   HISTORY  occurrences: 1", self.lines)
 
 
 if __name__ == "__main__":

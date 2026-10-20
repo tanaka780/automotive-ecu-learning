@@ -89,27 +89,57 @@ static void test_status_is_overheat(void) {
     TEST_ASSERT_TRUE_MESSAGE(status_is_overheat(101, &cfg), "閾値を下げれば、その閾値で判断する");
 }
 
-/* 値域外に入った瞬間もDTCとして数え、危険と値域外の間を移っても数え直さないことを確認する（Phase27） */
-static void test_dtc_counts_out_of_range(void) {
+/* 水温は、値域外を水温センサの故障、値域内の危険をオーバーヒートとして、別の記録に数えることを確認する。
+   2つの間を移ると、それぞれの記録で入った・出たと数える（Phase28） */
+static void test_temp_records_counted_separately(void) {
     DtcRecord dtc;
     diag_init(&dtc);
 
     test_feed(&dtc, 50, 2000, 50);    /* Sample1: 正常値 */
     test_feed(&dtc, 50, 2000, 0);     /* Sample2: 断線（値域外）になった瞬間 */
-    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[SENSOR_TEMP].count, "Sample2後: 値域外に入った瞬間に1回数える");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_ACTIVE, "Sample2後: Temp状態はACTIVE");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.captured, "Sample2後: 値域外でもフリーズフレームを記録する");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_TEMP_SENSOR].count, "Sample2後: 値域外に入った瞬間に、水温センサの故障を1回数える");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_TEMP_SENSOR].status == DTC_ACTIVE, "Sample2後: TempSensorはACTIVE");
+    TEST_ASSERT_EQUAL_MESSAGE(0, dtc.entries[DTC_ID_OVERHEAT].count, "Sample2後: 値域外はオーバーヒートとして数えない");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_TEMP_SENSOR, "Sample2後: フリーズフレームの原因はTempSensor");
     TEST_ASSERT_EQUAL_MESSAGE(0, dtc.freeze_frame.data.temperature, "Sample2後: フリーズフレームには生の値(0)が残る");
 
     test_feed(&dtc, 50, 2000, 115);   /* Sample3: 値域外 → 危険（センサが戻ったが高温） */
-    test_feed(&dtc, 50, 2000, 255);   /* Sample4: 危険 → 値域外（オーバーヒート中にショート） */
-    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[SENSOR_TEMP].count, "Sample4後: 危険と値域外の間を移っても1回のまま");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_TEMP_SENSOR].status == DTC_HISTORY, "Sample3後: 値域内に戻るとTempSensorはHISTORY");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_OVERHEAT].count, "Sample3後: 値域内の危険で、オーバーヒートを1回数える");
+
+    test_feed(&dtc, 50, 2000, 255);   /* Sample4: 危険 → 値域外（ショート） */
+    TEST_ASSERT_EQUAL_MESSAGE(2, dtc.entries[DTC_ID_TEMP_SENSOR].count, "Sample4後: 水温センサの故障の記録では、2回目の発生");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_OVERHEAT].count, "Sample4後: オーバーヒートは1回のまま");
 
     test_feed(&dtc, 50, 2000, 80);    /* Sample5: 正常に戻る */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_HISTORY, "Sample5後: 値域内の正常に戻るとHISTORY");
-    test_feed(&dtc, 50, 2000, 255);   /* Sample6: 再び値域外 */
-    TEST_ASSERT_EQUAL_MESSAGE(2, dtc.entries[SENSOR_TEMP].count, "Sample6後: 正常を挟んだ値域外は再発生として2回目");
-    TEST_ASSERT_EQUAL_MESSAGE(0, dtc.freeze_frame.data.temperature, "Sample6後: フリーズフレームは最初の1回のまま");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_TEMP_SENSOR].status == DTC_HISTORY &&
+                             dtc.entries[DTC_ID_OVERHEAT].status == DTC_HISTORY, "Sample5後: 2つともHISTORY");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_TEMP_SENSOR, "Sample5後: フリーズフレームは最初の1回のまま");
+}
+
+/* オーバーヒートの記録は、呼び出し側が判断に使える水温で決めたoverheatで数えることを確認する。
+   オーバーヒート中にショートしても、判断に使える水温（直前の115℃）が危険なら、ACTIVEのまま残る（Phase28） */
+static void test_overheat_record_follows_given_flag(void) {
+    DtcRecord dtc;
+    diag_init(&dtc);
+    VehicleSensorData d = { .speed = 50, .rpm = 2000, .temperature = 115 };
+    SensorStatus status;
+
+    status_check(&status, &d, test_default_config());
+    diag_check(&dtc, &status, &d, true);
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_OVERHEAT].count, "115℃: オーバーヒートを1回数える");
+
+    d.temperature = 255;   /* ショート。判断に使える水温は直前の115℃のまま */
+    status_check(&status, &d, test_default_config());
+    diag_check(&dtc, &status, &d, true);
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].status == DTC_ACTIVE, "ショート中も、オーバーヒートはACTIVEのまま");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_OVERHEAT].count, "ショート中も、オーバーヒートは数え直さない");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_TEMP_SENSOR].status == DTC_ACTIVE, "ショートで、水温センサの故障はACTIVE");
+
+    d.temperature = 80;
+    status_check(&status, &d, test_default_config());
+    diag_check(&dtc, &status, &d, false);
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].status == DTC_HISTORY, "80℃: オーバーヒートはHISTORY");
 }
 
 /* 非デフォルトのConfigDataを渡すと、デフォルトならNORMAL/WARNINGどまりの値でも
@@ -139,34 +169,34 @@ static void test_rpm_lifecycle_and_freeze_frame(void) {
     diag_init(&dtc);
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 全センサが正常値 */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_NONE, "Sample1後: RPMはまだ発生なし(NONE)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].status == DTC_NONE, "Sample1後: RPMはまだ発生なし(NONE)");
 
     test_feed(&dtc, 50, 5000, 50);   /* Sample2: RPM境界値(5000)はまだCRITICALではない */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_NONE, "Sample2後: RPM=5000ではDTC記録されない(境界値)");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 0, "Sample2後: RPM発生回数は0のまま(境界値)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].status == DTC_NONE, "Sample2後: RPM=5000ではDTC記録されない(境界値)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 0, "Sample2後: RPM発生回数は0のまま(境界値)");
 
     test_feed(&dtc, 50, 5001, 50);   /* Sample3: RPM境界値+1で初めてCRITICALになる（エッジ） */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 1, "Sample3後: RPM発生回数が1");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_ACTIVE, "Sample3後: RPM状態はACTIVE");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 1, "Sample3後: RPM発生回数が1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].status == DTC_ACTIVE, "Sample3後: RPM状態はACTIVE");
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.captured, "Sample3後: フリーズフレームが記録された");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_RPM, "Sample3後: フリーズフレームの原因はRPM");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_RPM, "Sample3後: フリーズフレームの原因はRPM");
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.data.rpm == 5001, "Sample3後: フリーズフレームのRPM値が一致(5001)");
 
     test_feed(&dtc, 50, 5600, 50);   /* Sample4: RPMがCRITICALのまま継続（二重カウント防止を確認） */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 1, "Sample4後: RPM発生回数は1のまま(継続は二重カウントしない)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 1, "Sample4後: RPM発生回数は1のまま(継続は二重カウントしない)");
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample5: RPMがNORMALに戻る（ACTIVE→HISTORYへの遷移を確認） */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_HISTORY, "Sample5後: RPM状態はHISTORY");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].status == DTC_HISTORY, "Sample5後: RPM状態はHISTORY");
 
     /* Sample6: RPMが最初と別の値(5700)で再度CRITICALになる（再発生のカウントと非上書きを確認） */
     test_feed(&dtc, 50, 5700, 50);
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 2, "Sample6後: RPM発生回数が2に増える(再発生)");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].status == DTC_ACTIVE, "Sample6後: RPM状態は再びACTIVE");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 2, "Sample6後: RPM発生回数が2に増える(再発生)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].status == DTC_ACTIVE, "Sample6後: RPM状態は再びACTIVE");
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.data.rpm == 5001, "Sample6後: フリーズフレームは最初のRPM=5001のまま上書きされない");
 
-    test_feed(&dtc, 50, 5700, 111);   /* Sample7: Tempも境界値+1でCRITICALになる（フリーズフレーム非上書きを確認） */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].count == 1, "Sample7後: Temp発生回数が1");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_RPM, "Sample7後: フリーズフレームの原因は依然RPM(上書きされない)");
+    test_feed(&dtc, 50, 5700, 111);   /* Sample7: 水温も境界値+1で危険（オーバーヒート）になる（フリーズフレーム非上書きを確認） */
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].count == 1, "Sample7後: Overheat発生回数が1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_RPM, "Sample7後: フリーズフレームの原因は依然RPM(上書きされない)");
 }
 
 /* CRITICALから完全にNORMALへ戻らずWARNINGどまりでも、ACTIVE→HISTORYへ遷移することを確認する */
@@ -176,10 +206,10 @@ static void test_active_to_history_via_warning(void) {
 
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 正常値 */
     test_feed(&dtc, 50, 2000, 111);  /* Sample2: Tempが境界値+1でCRITICALになる */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_ACTIVE, "Sample2後: Temp状態はACTIVE");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].status == DTC_ACTIVE, "Sample2後: Overheat状態はACTIVE");
 
     test_feed(&dtc, 50, 2000, 105);  /* Sample3: TempはWARNINGまでしか下がらない(NORMALには戻らない) */
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].status == DTC_HISTORY,
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].status == DTC_HISTORY,
           "Sample3後: WARNINGに下がっただけでもHISTORYに遷移する");
 }
 
@@ -193,10 +223,11 @@ static void test_freeze_frame_not_captured_without_critical(void) {
 
     TEST_ASSERT_FALSE_MESSAGE(dtc.freeze_frame.captured, "CRITICALが一度も発生しなければフリーズフレームは記録されない");
     TEST_ASSERT_TRUE_MESSAGE(
-          dtc.entries[SENSOR_SPEED].count == 0 &&
-          dtc.entries[SENSOR_RPM].count == 0 &&
-          dtc.entries[SENSOR_TEMP].count == 0,
-          "CRITICALが一度も発生しなければどのセンサも発生回数は0");
+          dtc.entries[DTC_ID_SPEED].count == 0 &&
+          dtc.entries[DTC_ID_RPM].count == 0 &&
+          dtc.entries[DTC_ID_TEMP_SENSOR].count == 0 &&
+          dtc.entries[DTC_ID_OVERHEAT].count == 0,
+          "CRITICALが一度も発生しなければどの記録も発生回数は0");
 }
 
 /* SpeedとRPMが同じサンプルで同時にCRITICALになったときの優先順位（配列の並び順）を確認する */
@@ -207,10 +238,10 @@ static void test_freeze_frame_tie_break_speed_vs_rpm(void) {
     test_feed(&dtc, 50, 2000, 50);    /* Sample1: 正常値 */
     test_feed(&dtc, 101, 5001, 50);   /* Sample2: SpeedとRPMが境界値+1で同時にCRITICALになる */
 
-    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_SPEED,
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_SPEED,
           "Speed vs RPM同時発生: フリーズフレームの原因はSpeed(配列の並び順が早い)");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_SPEED].count == 1, "Speed vs RPM同時発生: Speedの発生回数も1");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 1, "Speed vs RPM同時発生: RPMの発生回数も1(両方カウントされる)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_SPEED].count == 1, "Speed vs RPM同時発生: Speedの発生回数も1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 1, "Speed vs RPM同時発生: RPMの発生回数も1(両方カウントされる)");
 }
 
 /* RPMとTempが同じサンプルで同時にCRITICALになったときの優先順位（配列の並び順）を確認する */
@@ -221,10 +252,10 @@ static void test_freeze_frame_tie_break_rpm_vs_temp(void) {
     test_feed(&dtc, 50, 2000, 50);   /* Sample1: 正常値 */
     test_feed(&dtc, 50, 5001, 111);  /* Sample2: RPMとTempが境界値+1で同時にCRITICALになる */
 
-    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger_sensor == SENSOR_RPM,
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_RPM,
           "RPM vs Temp同時発生: フリーズフレームの原因はRPM(配列の並び順が早い)");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_RPM].count == 1, "RPM vs Temp同時発生: RPMの発生回数も1");
-    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[SENSOR_TEMP].count == 1, "RPM vs Temp同時発生: Tempの発生回数も1(両方カウントされる)");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_RPM].count == 1, "RPM vs Temp同時発生: RPMの発生回数も1");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_OVERHEAT].count == 1, "RPM vs Temp同時発生: Overheatの発生回数も1(両方カウントされる)");
 }
 
 int main(void) {
@@ -234,7 +265,8 @@ int main(void) {
     RUN_TEST(test_status_check_custom_config);
     RUN_TEST(test_status_out_of_range);
     RUN_TEST(test_status_is_overheat);
-    RUN_TEST(test_dtc_counts_out_of_range);
+    RUN_TEST(test_temp_records_counted_separately);
+    RUN_TEST(test_overheat_record_follows_given_flag);
     RUN_TEST(test_rpm_lifecycle_and_freeze_frame);
     RUN_TEST(test_active_to_history_via_warning);
     RUN_TEST(test_freeze_frame_not_captured_without_critical);

@@ -31,7 +31,9 @@ const ConfigData *test_default_config(void) {
 void test_run_sample(DtcRecord *dtc, const VehicleSensorData *data) {
     SensorStatus status;
     status_check(&status, data, test_default_config());
-    diag_check(dtc, &status, data);
+    /* 本体は判断に使える水温（値域外なら直前の正しい値、faultmgr.c）で高温を決めるが、ここでは故障確定を使わないので、
+       生の水温で決める。値域外のときは高温としない（値域外が続く間の高温は、diag_checkを直接呼ぶテストで確かめる） */
+    diag_check(dtc, &status, data, status_is_overheat(data->temperature, test_default_config()));
 }
 
 void test_feed(DtcRecord *dtc, uint8_t speed, uint16_t rpm, uint8_t temperature) {

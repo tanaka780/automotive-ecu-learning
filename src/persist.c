@@ -3,25 +3,30 @@
 #include "persist.h"
 #include "logger.h"
 
-/* 保存する値の個数: センサ3種×(count, status)=6 + フリーズフレーム(captured, trigger, speed, rpm, temp)=5 */
-#define PERSIST_VALUE_COUNT 11
+/* 保存する値の個数: 記録4種×(count, status)=8 + フリーズフレーム(captured, trigger, speed, rpm, temp)=5。
+   Phase28で記録を4種にし、11個から13個に変えた。前の形（11個）のファイルは個数が合わないので、
+   壊れたデータと同じく読み込まない（前の形の水温の回数は、オーバーヒートと水温センサの故障が混ざっていて分けられないため） */
+#define PERSIST_VALUE_COUNT 13
 
-/* テキスト化したDtcRecordが収まるサイズ（1値最大4桁+改行×11行に余裕を持たせる。他モジュールの128との慣習を保つ） */
+/* テキスト化したDtcRecordが収まるサイズ（1値最大5桁+改行×13行に余裕を持たせる。他モジュールの128との慣習を保つ） */
 #define PERSIST_BUF_SIZE 128
 
-/* DtcRecordの内容を、固定順の整数を改行区切りにしたテキストへ組み立てる（ファイルは扱わない） */
+/* DtcRecordの内容を、固定順の整数を改行区切りにしたテキストへ組み立てる（ファイルは扱わない）。
+   並びは記録の種類の順（DtcId）に回数・状態区分、その後にフリーズフレーム */
 static void dtc_to_text(const DtcRecord *dtc, char *buf, size_t bufsize) {
     /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
     (void)snprintf(buf, bufsize,
-             "%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n",
-             (int)dtc->entries[SENSOR_SPEED].count,
-             (int)dtc->entries[SENSOR_SPEED].status,
-             (int)dtc->entries[SENSOR_RPM].count,
-             (int)dtc->entries[SENSOR_RPM].status,
-             (int)dtc->entries[SENSOR_TEMP].count,
-             (int)dtc->entries[SENSOR_TEMP].status,
+             "%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n%d\n",
+             (int)dtc->entries[DTC_ID_SPEED].count,
+             (int)dtc->entries[DTC_ID_SPEED].status,
+             (int)dtc->entries[DTC_ID_RPM].count,
+             (int)dtc->entries[DTC_ID_RPM].status,
+             (int)dtc->entries[DTC_ID_TEMP_SENSOR].count,
+             (int)dtc->entries[DTC_ID_TEMP_SENSOR].status,
+             (int)dtc->entries[DTC_ID_OVERHEAT].count,
+             (int)dtc->entries[DTC_ID_OVERHEAT].status,
              (int)dtc->freeze_frame.captured,
-             (int)dtc->freeze_frame.trigger_sensor,
+             (int)dtc->freeze_frame.trigger,
              (int)dtc->freeze_frame.data.speed,
              (int)dtc->freeze_frame.data.rpm,
              (int)dtc->freeze_frame.data.temperature);
@@ -29,41 +34,33 @@ static void dtc_to_text(const DtcRecord *dtc, char *buf, size_t bufsize) {
 
 /* 固定順の整数テキストをDtcRecordへ変換する（ファイルは扱わない）。
    個数が足りない場合は壊れたデータとみなしfalseを返し、dtcは変更しない。
-   previous（前回状態、エッジ検出用の一時情報）は保存対象に含めないため、読み込み時は常にNORMALから再開する */
+   previous_bad（前回の異常の有無、エッジ検出用の一時情報）は保存対象に含めないため、読み込み時は常に異常なしから再開する */
 static bool text_to_dtc(const char *text, DtcRecord *dtc) {
     int values[PERSIST_VALUE_COUNT];
 
-    int n = sscanf(text, "%d %d %d %d %d %d %d %d %d %d %d",
+    int n = sscanf(text, "%d %d %d %d %d %d %d %d %d %d %d %d %d",
                    &values[0], &values[1], &values[2], &values[3],
                    &values[4], &values[5], &values[6], &values[7],
-                   &values[8], &values[9], &values[10]);
+                   &values[8], &values[9], &values[10], &values[11],
+                   &values[12]);
 
     if (n != PERSIST_VALUE_COUNT) {
         return false;
     }
 
-    dtc->entries[SENSOR_SPEED].sensor = SENSOR_SPEED;
-    dtc->entries[SENSOR_SPEED].count  = (uint8_t)values[0];
-    dtc->entries[SENSOR_SPEED].status = (DtcStatus)values[1];
-
-    dtc->entries[SENSOR_RPM].sensor = SENSOR_RPM;
-    dtc->entries[SENSOR_RPM].count  = (uint8_t)values[2];
-    dtc->entries[SENSOR_RPM].status = (DtcStatus)values[3];
-
-    dtc->entries[SENSOR_TEMP].sensor = SENSOR_TEMP;
-    dtc->entries[SENSOR_TEMP].count  = (uint8_t)values[4];
-    dtc->entries[SENSOR_TEMP].status = (DtcStatus)values[5];
-
-    dtc->freeze_frame.captured         = (bool)values[6];
-    dtc->freeze_frame.trigger_sensor   = (SensorId)values[7];
-    dtc->freeze_frame.data.speed       = (uint8_t)values[8];
-    dtc->freeze_frame.data.rpm         = (uint16_t)values[9];
-    dtc->freeze_frame.data.temperature = (uint8_t)values[10];
-
-    /* SENSOR_COUNTはenum定数のため、int（i）との比較にはキャストが必要（MISRA 10.4） */
-    for (int i = 0; i < (int)SENSOR_COUNT; i++) {
-        dtc->previous.levels[i] = LEVEL_NORMAL;
+    /* DTC_ID_COUNTはenum定数のため、int（i）との比較にはキャストが必要（MISRA 10.4） */
+    for (int i = 0; i < (int)DTC_ID_COUNT; i++) {
+        dtc->entries[i].id     = (DtcId)i;
+        dtc->entries[i].count  = (uint8_t)values[i * 2];
+        dtc->entries[i].status = (DtcStatus)values[(i * 2) + 1];
+        dtc->previous_bad[i]   = false;
     }
+
+    dtc->freeze_frame.captured         = (bool)values[8];
+    dtc->freeze_frame.trigger          = (DtcId)values[9];
+    dtc->freeze_frame.data.speed       = (uint8_t)values[10];
+    dtc->freeze_frame.data.rpm         = (uint16_t)values[11];
+    dtc->freeze_frame.data.temperature = (uint8_t)values[12];
 
     return true;
 }
