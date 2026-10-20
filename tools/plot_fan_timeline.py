@@ -8,8 +8,9 @@ README用の図（docs/images/fan_run_example.svg）の作り直し方（リポ�
 ほかの出力（ランダム・実時間版など）も、同じように標準入力へ渡せば描ける。
 
 横軸は1秒単位（出力に時刻は無く、分かるのは何秒目のサンプルで起きたかだけ）。
-図の中の言葉は、出力に出た出来事（ファンのON/OFF、水温センサーの異常・回復）の秒に自動で置くので、
-プログラムの動きが変われば、作り直した図も一緒に変わる。
+図の中の言葉は、出力に出た出来事（ファンのON/OFF、水温センサーのありえない値・異常・回復）の秒に自動で置くので、
+プログラムの動きが変われば、作り直した図も一緒に変わる。ありえない値（範囲外、Phase27）の秒は温度の線を描かず、
+グラフの上の帯で示す（断線の0℃などをそのまま描くと、目盛りが崩れるため）。
 config.txtのLOG_LEVELを上げると[IGN]・[FAN]の行が出なくなるため、既定（0）の出力を前提にする。
 """
 import re
@@ -60,6 +61,12 @@ def parse(lines):
             m = re.search(r"Temp:\s*(\d+) C", line)
             if m:
                 current["temp"] = int(m.group(1))
+        elif line.startswith("[STATUS] "):
+            # 温度センサーの値が、ありえない値（範囲外、Phase27）か。範囲外の値は線に描かない（目盛りが崩れるため）
+            if re.search(r"Temp: OUTRANGE", line):
+                current["invalid"] = True
+                if not (len(samples) >= 2 and samples[-2].get("invalid")):
+                    current["events"].append("outrange")
         elif line.startswith("[FAN] Fan ON"):
             current["events"].append("fan_on")
         elif line == "[FAN] Fan OFF":
@@ -129,7 +136,7 @@ def render(samples):
     def x_at(i):
         return LEFT + i * step
 
-    temps = [s["temp"] for s in samples if s["temp"] is not None]
+    temps = [s["temp"] for s in samples if s["temp"] is not None and not s.get("invalid")]
     lo = min(temps + [FAN_ON_TEMP]) - 10
     hi = max(temps + [FAN_ON_TEMP]) + 5
 
@@ -149,16 +156,26 @@ def render(samples):
             out.append(text((x_at(start) + x_at(end)) / 2, CHART_BOTTOM - 14, "センサー異常と判断中",
                             size=12, color=TEMP_LINE, anchor="middle"))
 
+    # 温度センサーの値が、ありえない値だった区間（グラフの上の帯。線は描かない）
+    for start, end, flag in runs([bool(s.get("invalid")) for s in samples]):
+        if flag:
+            values = sorted({samples[i]["temp"] for i in range(start, end)})
+            out.append(f'<rect x="{x_at(start):.1f}" y="{CHART_TOP}" width="{x_at(end) - x_at(start):.1f}" '
+                       f'height="20" fill="{GRID}"/>')
+            out.append(text((x_at(start) + x_at(end)) / 2, CHART_TOP + 10,
+                            "ありえない値（" + "・".join(f"{v}℃" for v in values) + "）",
+                            size=12, color="#FFFFFF", anchor="middle"))
+
     # ファンを回し始める温度の点線
     y80 = y_at(FAN_ON_TEMP)
     out.append(f'<line x1="{LEFT}" y1="{y80:.1f}" x2="{RIGHT}" y2="{y80:.1f}" stroke="{GRID}" '
                f'stroke-width="1" stroke-dasharray="5 4"/>')
 
-    # 水温（センサーが測った値）。電源OFFの秒は値が無いので線を切る
+    # 水温（センサーが測った値）。電源OFFの秒と、ありえない値の秒は、線を切る
     out.append(text(24, CHART_TOP + 8, "温度", size=13, color=MUTED))
     segment = []
     for i, s in enumerate(samples):
-        if s["temp"] is None:
+        if s["temp"] is None or s.get("invalid"):
             if segment:
                 out.append(f'<polyline points="{" ".join(segment)}" fill="none" stroke="{TEMP_LINE}" '
                            f'stroke-width="3" stroke-linejoin="round"/>')
@@ -173,7 +190,7 @@ def render(samples):
     placed = []
     for i, s in enumerate(samples):
         t = s["temp"]
-        if t is not None and (i == 0 or samples[i - 1]["temp"] != t):
+        if t is not None and not s.get("invalid") and (i == 0 or samples[i - 1]["temp"] != t):
             y = y_at(t)
             if all(abs(y - p) >= 18 for p in placed):   # 12pxの日本語フォントは、行の高さが約17pxになる
                 placed.append(y)
@@ -195,7 +212,8 @@ def render(samples):
 
     # 出来事の言葉。出来事が起きた秒に置き、前の言葉と重なるときは下の行へずらす
     labels = {"fan_on": "熱い → ファンON",
-              "degraded": "危険な値が続く → センサー異常と判断",
+              "outrange": "ありえない値になった",
+              "degraded": "3回続く → センサー異常と判断",
               "recovered": "センサー回復",
               "fan_off": "冷えた → ファン停止"}
     row_ends = []
