@@ -8,6 +8,15 @@
    壊れたデータと同じく読み込まない（前の形の水温の回数は、オーバーヒートと水温センサの故障が混ざっていて分けられないため） */
 #define PERSIST_VALUE_COUNT 13
 
+/* 通信の途絶の記録の値の個数: メッセージ3種×(count, status)=6（Phase29）。受信監視状態（途絶の判断の途中経過）は
+   保存しない。起動し直したら、途絶の判断をやり直すため */
+#define PERSIST_CAN_VALUE_COUNT 6
+/* 下の書式・sscanfはメッセージ3種の前提で書いているので、メッセージの種類が変わったらコンパイルで気づけるようにする */
+_Static_assert(CAN_MSG_COUNT == 3, "persist.cの通信の途絶の記録の書式は、メッセージ3種の前提");
+
+/* ログの1行（"Saved meter DTC data is corrupted, ignoring"等）が収まるサイズ */
+#define PERSIST_LOG_SIZE 64
+
 /* テキスト化したDtcRecordが収まるサイズ（1値最大5桁+改行×13行に余裕を持たせる。他モジュールの128との慣習を保つ） */
 #define PERSIST_BUF_SIZE 128
 
@@ -124,5 +133,59 @@ bool persist_load_dtc(DtcRecord *dtc, const char *filename) {
     }
 
     log_print_leveled(LOG_INFO, "PERSIST", "Loaded saved DTC data");
+    return true;
+}
+
+/* ログの文の間にどのECUの記録かを入れる（例："Saved " + "meter" + " DTC data"）。タグは[PERSIST]のまま
+   （保存のログはpersist.cが出す。[CAN-DTC]等は記録の表示のタグ）。書式の文字列は引数で受け取らず、ここで固定する */
+static void persist_log_can(LogLevel level, const char *before, const char *ecu_name, const char *after) {
+    char line[PERSIST_LOG_SIZE];
+    /* 表示幅は固定の文とECUの名前（"meter"/"fan"）で決まり切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(line, sizeof(line), "%s%s%s", before, ecu_name, after);
+    log_print_leveled(level, "PERSIST", line);
+}
+
+/* 通信の途絶の記録を、メッセージの順（CanMessageId）に回数・状態区分を並べた改行区切りのテキストにして保存する（Phase29） */
+bool persist_save_can_dtc(const CanDtcRecord *rec, const char *filename, const char *ecu_name) {
+    char text[PERSIST_BUF_SIZE];
+    /* 表示幅は型・書式指定子で保証されており切り詰めは起こらないため、戻り値は(void)で明示的に無視する（MISRA 17.7） */
+    (void)snprintf(text, sizeof(text), "%d\n%d\n%d\n%d\n%d\n%d\n",
+             (int)rec->count[0], (int)rec->status[0],
+             (int)rec->count[1], (int)rec->status[1],
+             (int)rec->count[2], (int)rec->status[2]);
+
+    if (!write_text_to_file(filename, text)) {
+        persist_log_can(LOG_ERROR, "Failed to save ", ecu_name, " DTC data");
+        return false;
+    }
+
+    persist_log_can(LOG_INFO, "Saved ", ecu_name, " DTC data");
+    return true;
+}
+
+/* 通信の途絶の記録を読み込む（Phase29）。値が6個そろわなければ壊れたデータとみなし、recは変更しない */
+bool persist_load_can_dtc(CanDtcRecord *rec, const char *filename, const char *ecu_name) {
+    char text[PERSIST_BUF_SIZE];
+
+    if (!read_text_from_file(filename, text, sizeof(text))) {
+        persist_log_can(LOG_INFO, "No saved ", ecu_name, " DTC data (first run)");
+        return false;
+    }
+
+    int values[PERSIST_CAN_VALUE_COUNT];
+    int n = sscanf(text, "%d %d %d %d %d %d",
+                   &values[0], &values[1], &values[2], &values[3], &values[4], &values[5]);
+    if (n != PERSIST_CAN_VALUE_COUNT) {
+        persist_log_can(LOG_ERROR, "Saved ", ecu_name, " DTC data is corrupted, ignoring");
+        return false;
+    }
+
+    /* CAN_MSG_COUNTはenum定数のため、int（i）との比較にはキャストが必要（MISRA 10.4） */
+    for (int i = 0; i < (int)CAN_MSG_COUNT; i++) {
+        rec->count[i]  = (uint8_t)values[i * 2];
+        rec->status[i] = (DtcStatus)values[(i * 2) + 1];
+    }
+
+    persist_log_can(LOG_INFO, "Loaded saved ", ecu_name, " DTC data");
     return true;
 }

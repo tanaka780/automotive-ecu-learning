@@ -253,6 +253,10 @@ int main(void) {
     can_monitor_init(&fan_can_monitor);
     CanDtcRecord fan_can_dtc;
     can_diag_init(&fan_can_dtc);
+    /* 通信の途絶の記録は、それを見つけたECUごとのファイルから読み込む（Phase29）。無い・壊れている場合は0件のまま続ける。
+       起動時自己診断（POST）はエンジン監視ECUの自己診断なので、この結果では変えない */
+    (void)persist_load_can_dtc(&can_dtc, PERSIST_METER_DTC_FILENAME, "meter");
+    (void)persist_load_can_dtc(&fan_can_dtc, PERSIST_FAN_DTC_FILENAME, "fan");
     FanEcuState fan_state;             /* ファン制御ECU役の判断の状態（水温・要求・出力） */
     fan_ecu_init(&fan_state);
 
@@ -344,7 +348,7 @@ int main(void) {
         log_print("Enter command (clear/Enter to skip):"); /* 診断ツールからのコマンド入力を受け付ける */
         char command_line[CMD_BUF_SIZE];
         if (cmd_read_line(command_line, sizeof(command_line))) {
-            cmd_dispatch(command_line, &dtc);
+            cmd_dispatch(command_line, &dtc, &can_dtc, &fan_can_dtc);
         }
     } else {
         cmd_notify_rejected();
@@ -353,6 +357,10 @@ int main(void) {
     if (!persist_save_dtc(&dtc, PERSIST_DTC_FILENAME)) {   /* 次回起動時のためにDTC記録を保存する */
         /* 保存失敗時も特別な処理は行わない。詳細はpersist.c内のログ参照 */
     }
+    /* メーターECU役・ファン制御ECU役の通信の途絶の記録も、それぞれのファイルへ保存する（Phase29）。
+       失敗時もエンジン監視ECUの記録と同じく特別な処理は行わない */
+    (void)persist_save_can_dtc(&can_dtc, PERSIST_METER_DTC_FILENAME, "meter");
+    (void)persist_save_can_dtc(&fan_can_dtc, PERSIST_FAN_DTC_FILENAME, "fan");
 
     return 0;
 }

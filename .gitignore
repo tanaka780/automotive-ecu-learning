@@ -23,6 +23,9 @@ test_fan_ctrl
 test_fan_ecu
 dtc_data.txt
 test_dtc_data.txt
+meter_dtc.txt
+fan_dtc.txt
+test_can_dtc_data.txt
 test_config.txt
 config.txt
 fixture.txt

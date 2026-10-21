@@ -67,7 +67,7 @@ TEST_IGNITION_TARGET = test_ignition
 
 # cmd.c の動作確認用テスト（diag_clear・cmd_dispatchの確認、main.c は使わない）
 # test_common.c が status_check/diag_check を参照するため status.c/diag.c も含める
-TEST_CMD_SRCS = test/test_cmd.c test/test_common.c src/status.c src/diag.c src/logger.c src/cmd.c src/config.c src/validate.c src/dtc_status.c $(UNITY_DIR)/unity.c
+TEST_CMD_SRCS = test/test_cmd.c test/test_common.c src/status.c src/diag.c src/logger.c src/cmd.c src/config.c src/validate.c src/dtc_status.c src/can_diag.c $(UNITY_DIR)/unity.c
 TEST_CMD_TARGET = test_cmd
 
 # config.c の動作確認用テスト（config_loadのファイルパースの正常系・異常系の確認、main.c は使わない）

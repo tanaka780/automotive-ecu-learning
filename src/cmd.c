@@ -32,17 +32,23 @@ static bool parse_sensor_name(const char *name, SensorId *sensor) {
     return false;
 }
 
-/* 読み込んだ文字列を解釈する。"clear"は全DTCを、"clear <センサ名>"は指定センサ1件だけをクリアする。
+/* 読み込んだ文字列を解釈する。"clear"は3つのECUの記録を全部、"clear <センサ名>"はエンジン監視ECUの指定センサの記録だけをクリアする。
    前後の空白はトリムせず、単一スペース区切りの完全一致のみを受け付ける（例:" clear"や"clear "は
    Unknown commandになる）。それ以外（想定外のコマンド、"clear"に続く不正なセンサ名、余分なトークン）は
    認識できない旨を表示する。空文字列は何もしない */
-void cmd_dispatch(const char *line, DtcRecord *dtc) {
+void cmd_dispatch(const char *line, DtcRecord *dtc, CanDtcRecord *meter_dtc, CanDtcRecord *fan_dtc) {
     if (strcmp(line, "") == 0) {
         return;
     }
 
     if (strcmp(line, "clear") == 0) {
         diag_clear(dtc);
+        /* 対象を指定しない"clear"は、診断機で全部のECUの記録を消す操作に当たるとし、メーターECU役・ファン制御ECU役の
+           通信の途絶の記録も消す（Phase29。記録が保存されるようになり、消す方法が要るため）。全部のECUを消すと決めるのは
+           ここなので、ログもここで1行出す（[CAN-DTC]等のタグは記録の表示が使うため使わない） */
+        can_diag_init(meter_dtc);
+        can_diag_init(fan_dtc);
+        log_print_leveled(LOG_INFO, "CMD", "Cleared records of all ECUs");
         return;
     }
 

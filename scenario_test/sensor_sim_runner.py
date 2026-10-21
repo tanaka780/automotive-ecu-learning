@@ -17,22 +17,24 @@ SENSOR_SIM_VIRTUAL = os.path.join(REPO_ROOT, "sensor_sim_virtual")
 TIMEOUT_SEC = 60
 
 
-def run_in_dir(workdir, files, binary=SENSOR_SIM):
+def run_in_dir(workdir, files, binary=SENSOR_SIM, stdin_text=None):
     """workdirにfilesの{ファイル名: 内容}を書き込んでから、workdirでbinary（既定はsensor_sim）を実行し、結果を返す。
 
     workdirに前回の実行で保存されたファイル（dtc_data.txt等）があれば、そのまま読み込まれる。
+    stdin_textを渡すと、それを標準入力に与える（点検コマンドを入力する場合、Phase29）。
     """
     for name, text in files.items():
         with open(os.path.join(workdir, name), "w") as f:
             f.write(text)
-    # イグニッションOFFで終わるとcmd_read_lineが入力待ちになるため、標準入力にはEOFを渡す
+    # イグニッションOFFで終わるとcmd_read_lineが入力待ちになるため、入力を渡さないときは標準入力にEOFを渡す
+    stdin_args = {"stdin": subprocess.DEVNULL} if stdin_text is None else {"input": stdin_text}
     return subprocess.run(
         [binary],
         cwd=workdir,
-        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=TIMEOUT_SEC,
+        **stdin_args,
     )
 
 
