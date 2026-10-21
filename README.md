@@ -13,13 +13,13 @@ C言語でパソコン上に再現したプログラム。エンジンの見張�
 
 ![再生画面：通信の途切れ（10秒目）](docs/images/viewer_comm_example.png)
 
-実際に動かした結果を1秒ずつ再生する画面。再生画面で見られる19の場面のうち「通信の途切れ」を再生している途中（10秒目）で、
+実際に動かした結果を1秒ずつ再生する画面。再生画面で見られる20の場面のうち「通信の途切れ」を再生している途中（10秒目）で、
 エンジンの見張り役からの連絡が、ファン係とメーターに届かなくなっている。
 ファン係は本当の温度が分からないので安全のためファンを回し、メーターは最後に届いた値を表示している。
 
 ### 実際に動かした結果の例：温度センサーの異常（20秒間の流れ）
 
-19の場面のうち「温度センサーの異常」の20秒間を、1枚の図にしたもの。温度が上がるとファンを回す。
+20の場面のうち「温度センサーの異常」の20秒間を、1枚の図にしたもの。温度が上がるとファンを回す。
 途中で温度センサーの配線が切れて、ありえない値になると、直前の正しい温度を使い、3回続いたらセンサーの異常と判断する。
 本当の温度が分からないので、安全のためファンを回し続ける。センサーが元に戻り、温度が下がってからファンを止める。
 ほかの対応は、下の「できること」の表と再生画面で見られる。
@@ -30,6 +30,7 @@ C言語でパソコン上に再現したプログラム。エンジンの見張�
 
 | 分類 | 場面 | プログラムの動き |
 | --- | --- | --- |
+| 普段 | 異常が無い | 1秒ごとに速度・回転数・温度を確かめてメーターに表示するだけで、警告も記録もしない |
 | センサー | 速度・回転数・温度のどれかが危険な値 | 警告を出し、危険になった瞬間を記録する（そのときの車の状態も1回だけ保存） |
 | | 速度・回転数の危険な値が3回続く | そのセンサーは異常と判断し、安全な値（停車・アイドリング相当）に置き換えて動き続ける |
 | | 温度センサーが、ありえない値（配線が切れた・つながった）を出す | 記録し、直前の正しい温度を使う。3回続いたらセンサーの異常と判断して常温相当に置き換え、メーターは温度を「--」と表示する |
@@ -49,13 +50,13 @@ C言語でパソコン上に再現したプログラム。エンジンの見張�
 | | エンジンを切っている間 | 何もしない。かけ直すと、3つのコンピュータとも判断をやり直す（記録は残す） |
 | 点検 | 整備工場での点検 | エンジンを切っているときだけ、点検用のコマンドで記録を全部、またはセンサーごとに消せる。おかしな命令は受け付けない |
 
-上の表の対応は、冒頭の再生画面の19の場面で、1秒ずつ再生して見られる。ブラウザで次のURLを開く（インストールは要らない）。
+上の表の対応は、冒頭の再生画面の20の場面で、1秒ずつ再生して見られる。ブラウザで次のURLを開く（インストールは要らない）。
 [https://tanaka780.github.io/automotive-ecu-learning/viewer/](https://tanaka780.github.io/automotive-ecu-learning/viewer/)
 （リポジトリの[viewer/index.html](viewer/index.html)を、GitHub Pagesで公開したもの。ダウンロードしてこのファイルを開いても動く）
 
 ### 取り組みの量（2026年10月時点）
 
-- 期間：2026年6月〜（約4か月）。作業の記録（日報）66日分
+- 期間：2026年6月〜（約4か月）。作業の記録（日報）67日分
 - 27の段階に分けて、小さく作っては確かめる、を繰り返した
 - C言語のプログラム約3,300行、テストのプログラム約4,300行
 - 9つのシナリオ（車の使われ方の筋書き）を決め、上の表の対応を、自動テストと実際の実行で確かめている
@@ -167,7 +168,7 @@ make sensor_sim_virtual && ./sensor_sim_virtual
 make sensor_sim_virtual && R=$(pwd) && W=$(mktemp -d) && cp tools/fan_run_example_fixture.txt $W/fixture.txt && (cd $W && $R/sensor_sim_virtual < /dev/null) | python3 tools/plot_fan_timeline.py > docs/images/fan_run_example.svg
 ```
 
-再生画面（`viewer/index.html`）のデータの作り直し（`tools/make_viewer_data.py`が19の場面ごとに作業用のフォルダで仮想時間版を動かし、その出力を1秒ごとの画面の情報にまとめて`viewer/index.html`の中に書き込む。場面ごとの期待する出来事と1つでも食い違えば、書き込まずに止まる。リポジトリ直下の記録ファイル（`dtc_data.txt`など）は上書きしない）:
+再生画面（`viewer/index.html`）のデータの作り直し（`tools/make_viewer_data.py`が20の場面ごとに作業用のフォルダで仮想時間版を動かし、その出力を1秒ごとの画面の情報にまとめて`viewer/index.html`の中に書き込む。場面ごとの期待する出来事と1つでも食い違えば、書き込まずに止まる。リポジトリ直下の記録ファイル（`dtc_data.txt`など）は上書きしない）:
 
 ```bash
 make sensor_sim_virtual && python3 tools/make_viewer_data.py
@@ -176,7 +177,7 @@ make sensor_sim_virtual && python3 tools/make_viewer_data.py
 冒頭の再生画面の画像（`docs/images/viewer_comm_example.png`）の撮り直し（WSLから、Windowsに入っているEdgeを画面なしで動かして撮る。作業用のフォルダに再生画面のコピーを作り、開いたときの場面と秒だけを「通信の途切れ」の10秒目に書き換える。書き換えられなかったときは、撮らずに止まる）:
 
 ```bash
-W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 3, index = 9,/' viewer/index.html > $W/shot.html && grep -q 'var scene = 3, index = 9,' $W/shot.html && "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" --headless=new --disable-gpu --hide-scrollbars --window-size=1000,1180 --screenshot="$(wslpath -w $W/shot.png)" "$(wslpath -w $W/shot.html)" && cp $W/shot.png docs/images/viewer_comm_example.png
+W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 4, index = 9,/' viewer/index.html > $W/shot.html && grep -q 'var scene = 4, index = 9,' $W/shot.html && "/mnt/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" --headless=new --disable-gpu --hide-scrollbars --window-size=1000,1180 --screenshot="$(wslpath -w $W/shot.png)" "$(wslpath -w $W/shot.html)" && cp $W/shot.png docs/images/viewer_comm_example.png
 ```
 
 ---
@@ -336,4 +337,4 @@ W=$(mktemp -d) && sed 's/var scene = 0, index = 0,/var scene = 3, index = 9,/' v
 - Scheduler（`scheduler.c`）は優先度・オーバーラン検出を持たず、登録数も固定上限（`SCHEDULER_MAX_TASKS`、8個）で周期0ms・重複登録への防御もない最小構成。実車OSEK/AUTOSAR OSが持つoffset（複数タスクの起動タイミングを意図的にずらし、CPU/バス負荷のスパイクを避ける仕組み）も、タスクが1個のみの現状では効果が無いため実装していない
 - テストカバレッジ計測（`make coverage`）は19テストターゲットそれぞれについて担当モジュール1つのgcov結果を個別に表示するのみで、プロジェクト全体を1つの数値に合算する仕組み（`lcov`等）は導入していない。共有モジュール（`debounce.c`等）が担当ターゲット以外からも間接的に使われている場合、その分の実行は数値に反映されない。`main.c`はUnityとリンクできないため計測対象に含まれない
 - Makefileは、どの`.h`がどの`.c`に読まれるかを区別せず、`include/`・`sim/`・`test/`のいずれかの`.h`が変われば全ての実行ファイル・テストを作り直す（必要以上に作り直すが、ビルドは数秒で済む）。`vendor/unity/`のヘッダは依存関係に含めていない
-- 再生画面（`viewer/index.html`）は、データを作ったときの19場面の出力を再生するだけで、画面から別の条件を起こすことはできない。冷却ファンを回している理由は、本体が理由の変化をログに出さないため、出力からファン制御ECUと同じ決まりで読み替えて表示している。GitHubのリポジトリの画面では画面として表示されない（HTMLの中身が文字のまま出る）ため、GitHub Pagesで公開したURLか、ダウンロードしたファイルで開く。GitHub Pagesの公開内容は、`main`にpushした時点のものに更新される
+- 再生画面（`viewer/index.html`）は、データを作ったときの20場面の出力を再生するだけで、画面から別の条件を起こすことはできない。冷却ファンを回している理由は、本体が理由の変化をログに出さないため、出力からファン制御ECUと同じ決まりで読み替えて表示している。GitHubのリポジトリの画面では画面として表示されない（HTMLの中身が文字のまま出る）ため、GitHub Pagesで公開したURLか、ダウンロードしたファイルで開く。GitHub Pagesの公開内容は、`main`にpushした時点のものに更新される
