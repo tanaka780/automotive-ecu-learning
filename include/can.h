@@ -97,6 +97,9 @@ typedef struct {
 void can_bus_init(CanBus *bus);
 /* monの状態を初期値（CAN_LINK_OK、カウンタ0、キャッシュ0相当）にリセットする */
 void can_monitor_init(CanMonitor *mon);
+/* 受信するECUがエンジンのかけ直し（イグニッションOFF→ON）を見つけたときに、途絶の判断の途中経過（連続回数）と
+   途絶の状態だけを初期値に戻す。送信時刻の記録と最後に受け取った値は残す */
+void can_monitor_restart(CanMonitor *mon);
 
 /* エンジンECU役：dataの生値をゲージデータとしてbusへ書く */
 void can_send_engine_status(CanBus *bus, const VehicleSensorData *data);

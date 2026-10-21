@@ -45,6 +45,10 @@ void diag_init(DtcRecord *dtc);
    車速・回転数はCRITICAL・値域外、水温センサの故障は水温の値域外を異常とする。オーバーヒートは、
    呼び出し側が判断に使える水温で決めたoverheat（高温の通知と同じ値）を異常とする（Phase28） */
 void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorData *data, bool overheat);
+/* エンジンをかけ直したとき（イグニッションOFF→ON）に、前回の異常の有無だけを異常なしに戻す。
+   切っている間はECUが通電していないので、起動したときと同じく、かけ直した後も異常なら数え直す。
+   回数・状態区分・フリーズフレームは残す（起動し直したときに保存ファイルから引き継ぐのと同じ） */
+void diag_reset_previous(DtcRecord *dtc);
 /* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態(diag_initと同じ)に戻す */
 void diag_clear(DtcRecord *dtc);
 /* 診断コマンド（"clear <センサ名>"相当）によるクリア要求を受けて、指定したセンサの記録だけを初期状態に戻す

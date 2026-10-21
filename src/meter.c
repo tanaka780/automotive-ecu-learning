@@ -7,6 +7,25 @@
 
 /* 受信した値の表示はメーターECU役の仕事なので、can.cから移した。文面・タグは移す前と同じ */
 
+void meter_init(MeterState *state) {
+    state->powered = false;
+}
+
+/* イグニッションON中ならtrueを返す。OFF→ONに変わった最初の呼び出しで、受信監視状態の途絶の連続回数と
+   途絶の状態を戻す（can_monitor_restart。送信時刻の記録は戻さない）。ファン制御ECU役のfan_ecu_is_poweredと同じ形。
+   OFFの間に一度は呼ばれることが前提（警告灯データの受信が200ms周期で呼ばれるので、今の構成では見逃さない） */
+static bool meter_is_powered(MeterContext *ctx) {
+    if (ctx->ignition->current != IGNITION_ON) {
+        ctx->state->powered = false;
+        return false;
+    }
+    if (!ctx->state->powered) {
+        can_monitor_restart(ctx->can_monitor);
+        ctx->state->powered = true;
+    }
+    return true;
+}
+
 /* 受信したゲージデータとリンク状態を1行でコンソールに出力する。
    temp_unknownがtrue（水温センサの確定異常の通知を受けている間）は、水温を"--"と表示する（Phase27）。
    ゲージデータの水温はフェイルセーフ値（常温相当）に差し替わっており、本当の水温は分からない。
@@ -49,7 +68,7 @@ static void meter_print_fan_status(const CanFanStatus *status, CanLinkState stat
 /* メーターECU役：警告灯データを受信し、Timeoutを検知して表示する（Phase20）。
    Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 void meter_receive_fault_status(MeterContext *ctx) {
-    if (ctx->ignition->current == IGNITION_ON) {
+    if (meter_is_powered(ctx)) {
         CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAULT_STATUS];
         CanFaultStatus status;
         CanLinkState state = can_receive_fault_status(ctx->can_monitor, ctx->can_bus, &status);
@@ -66,7 +85,7 @@ void meter_receive_fault_status(MeterContext *ctx) {
 /* メーターECU役：ゲージデータを受信し、Timeout/Invalid Dataを検知して表示する（Phase20）。
    Lost/Recoveryの遷移をCanDtcRecordへ記録する（Phase21） */
 void meter_receive_engine_status(MeterContext *ctx) {
-    if (ctx->ignition->current == IGNITION_ON) {
+    if (meter_is_powered(ctx)) {
         CanLinkState previous = ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS];
         CanEngineStatus status;
         CanLinkState state = can_receive_engine_status(ctx->can_monitor, ctx->can_bus, &status);
@@ -85,7 +104,7 @@ void meter_receive_engine_status(MeterContext *ctx) {
 /* メーターECU役：ファン制御ECUからのファン状態を受信し、Timeoutを検知して表示する（Phase26）。
    途絶はファン制御ECUの異常として、CanDtcRecordのFanStatusへ記録する */
 void meter_receive_fan_status(MeterContext *ctx) {
-    if (ctx->ignition->current == IGNITION_ON) {
+    if (meter_is_powered(ctx)) {
         CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAN_STATUS];
         CanFanStatus status;
         CanLinkState state = can_receive_fan_status(ctx->can_monitor, ctx->can_bus, &status);

@@ -64,6 +64,13 @@ void diag_check(DtcRecord *dtc, const SensorStatus *status, const VehicleSensorD
     }
 }
 
+/* 前回の異常の有無は保存しない値なので、起動し直したとき（persist.cの読み込み）と同じく異常なしに戻す */
+void diag_reset_previous(DtcRecord *dtc) {
+    for (int i = 0; i < (int)DTC_ID_COUNT; i++) {
+        dtc->previous_bad[i] = false;
+    }
+}
+
 /* 診断コマンド（"clear"相当）によるクリア要求を受けて、DTC記録・フリーズフレームを初期状態に戻す */
 void diag_clear(DtcRecord *dtc) {
     diag_init(dtc);

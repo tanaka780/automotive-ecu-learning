@@ -124,6 +124,57 @@ static void test_engine_status_recovers_after_valid_receptions(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "有効なフレームを3回連続受信すればCAN_LINK_OKに復帰する");
 }
 
+/* can_monitor_restart（エンジンのかけ直し）は、途絶の連続回数と状態だけを戻し、送信時刻の記録と最後に受け取った値は
+   残すことを確認する。送信時刻の記録が残るので、OFF前のフレームが残ったbusを読んでも新しいフレームとは見なさず、
+   かけ直した後に受け取れない回が3回続いたときに、改めて途絶と確定する */
+static void test_monitor_restart_keeps_timestamp(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    VehicleSensorData data = { .speed = 60, .rpm = 3000, .temperature = 60 };
+    can_send_engine_status(&bus, &data);
+    CanEngineStatus status;
+    CanLinkState state = can_receive_engine_status(&mon, &bus, &status);   /* 受け取る */
+    for (int i = 0; i < 2; i++) {
+        state = can_receive_engine_status(&mon, &bus, &status);           /* 2回受け取れない（あと1回で途絶） */
+    }
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "前提: 受け取れない回が2回ではまだOK");
+    uint32_t seen = mon.last_seen_timestamp_ms[CAN_MSG_ENGINE_STATUS];
+
+    can_monitor_restart(&mon);
+    TEST_ASSERT_EQUAL_MESSAGE(0, mon.bad_count[CAN_MSG_ENGINE_STATUS], "かけ直し後: 受け取れない回数は0に戻る");
+    TEST_ASSERT_EQUAL_MESSAGE(seen, mon.last_seen_timestamp_ms[CAN_MSG_ENGINE_STATUS], "かけ直し後: 送信時刻の記録は残る");
+    TEST_ASSERT_EQUAL_MESSAGE(60, mon.last_engine_status.speed, "かけ直し後: 最後に受け取った値は残る");
+
+    for (int i = 0; i < 2; i++) {
+        state = can_receive_engine_status(&mon, &bus, &status);           /* busにはOFF前のフレームが残ったまま */
+    }
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_OK, "かけ直し後の2回目まではOK（切る前の2回を足さない）");
+    state = can_receive_engine_status(&mon, &bus, &status);
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_LOST, "かけ直し後の3回目で途絶と確定する（古いフレームを新しいと見誤らない）");
+}
+
+/* 途絶と確定した後にかけ直すと、途絶の状態がOKに戻る（起動したときと同じ）ことを確認する */
+static void test_monitor_restart_clears_lost(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    CanMonitor mon;
+    can_monitor_init(&mon);
+
+    CanEngineStatus status;
+    CanLinkState state = CAN_LINK_OK;
+    for (int i = 0; i < 3; i++) {
+        state = can_receive_engine_status(&mon, &bus, &status);
+    }
+    TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_LOST, "前提: LOSTに確定済み");
+
+    can_monitor_restart(&mon);
+    TEST_ASSERT_TRUE_MESSAGE(mon.state[CAN_MSG_ENGINE_STATUS] == CAN_LINK_OK, "かけ直し後: 途絶の状態はOKに戻る");
+    TEST_ASSERT_EQUAL_MESSAGE(0, mon.good_count[CAN_MSG_ENGINE_STATUS], "かけ直し後: 復帰の回数も0に戻る");
+}
+
 /* 送ったセンサ別の確定異常フラグが、警告灯データのビットフラグとして正しく復元されることを確認する */
 static void test_fault_status_roundtrip(void) {
     CanBus bus;
@@ -243,6 +294,8 @@ int main(void) {
     RUN_TEST(test_engine_status_timeout_after_missed_receptions);
     RUN_TEST(test_engine_status_invalid_data_confirms_lost);
     RUN_TEST(test_engine_status_recovers_after_valid_receptions);
+    RUN_TEST(test_monitor_restart_keeps_timestamp);
+    RUN_TEST(test_monitor_restart_clears_lost);
     RUN_TEST(test_fault_status_roundtrip);
     RUN_TEST(test_fault_status_overheat_roundtrip);
     RUN_TEST(test_fault_status_timeout_after_missed_receptions);

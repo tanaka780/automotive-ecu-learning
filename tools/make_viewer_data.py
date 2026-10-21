@@ -325,11 +325,15 @@ def parse(lines):
         if line in ("[IGN] ON", "[IGN] OFF"):
             frame["ign"] = line[6:]
             if frame["ign"] == "OFF":
-                # 電源OFFでファン係は止まり、ONに戻ると判断をやり直す（ログは出ない）。
-                # 連絡の途切れの状態は戻さない（fan_ecu.cのfan_ecu_is_poweredと同じ）ので、fan_lostはそのまま
+                # 電源OFFでファン係は止まり、ONに戻ると判断をやり直す（ログは出ない）
                 fan_on = False
         elif line == "[IGN] OFF -> ON":
             frame["events"].append("エンジンをかけた")
+            # かけ直すと、エンジン監視ECUは記録の前回の状態を戻し、異常が続いていても数え直す（main.cと同じ）
+            prev_levels.clear()
+            # ファン係も連絡の途切れの状態を戻す（fan_ecu.cのfan_ecu_is_poweredが受信監視状態の途絶の状態を戻すのと同じ。
+            # 戻したときはログが出ないので、ここで消す）
+            fan_lost.clear()
         elif line == "[IGN] ON -> OFF":
             frame["events"].append("エンジンを切った")
         elif line.startswith("Speed:"):

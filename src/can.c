@@ -37,6 +37,17 @@ void can_monitor_init(CanMonitor *mon) {
     mon->last_fan_status.fan_on         = false;
 }
 
+/* 切っている間は受信するECUも通電していないので、起動したときと同じく、かけ直した後に受け取れない回が
+   3回続いたら途絶とする（切る前の回数を足さない）。送信時刻の記録は戻さない。busはOFFの間も最後のフレームを
+   持ち続けるので、戻すとOFF前の古いフレームを新しいものと見誤るため */
+void can_monitor_restart(CanMonitor *mon) {
+    for (int i = 0; i < (int)CAN_MSG_COUNT; i++) {
+        mon->bad_count[i]  = 0U;
+        mon->good_count[i] = 0U;
+        mon->state[i]      = CAN_LINK_OK;
+    }
+}
+
 /* エンジンECU役：dataの生値をゲージデータとしてbusへ書く */
 void can_send_engine_status(CanBus *bus, const VehicleSensorData *data) {
     CanFrame *frame = &bus->frames[CAN_MSG_ENGINE_STATUS];

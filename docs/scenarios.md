@@ -160,6 +160,7 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 - 2回目の起動直後、1回目で記録されたDTCの発生回数・状態区分が引き継がれている
 - エッジ検出用の前回状態（previous）は、2回目の起動時点でNORMALにリセットされている（保存対象外のため）
 - そのため、2回目の起動でも同じセンサがCRITICALのままなら、異常に入った瞬間として発生回数がもう1つ増える（実車でも、発生回数はイグニッションON〜OFFの1サイクルごとに数える）
+- プログラムを起動し直さず、実行の途中でエンジンを切ってかけ直した場合も、同じく前回状態がリセットされ、CRITICALのままなら発生回数がもう1つ増える。故障の確定（Degraded）も、起動したときと同じくやり直す
 - フリーズフレームも引き継がれ、2回目の起動でCRITICALが発生しても上書きされない（最初に発生した瞬間の値を残す）
 - 保存ファイルが無い場合（初回起動）は、DTC0件の初期状態から開始する
 - 記録の種類を分ける前の形の保存ファイルは、壊れたファイルと同じく扱い、DTC0件の初期状態から開始する（Phase28）
@@ -205,8 +206,9 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 - Timeout/Invalid Dataの確定・復帰は、DTC相当の記録（`can_diag.c`、発生回数・状態区分NONE/ACTIVE/HISTORY）にも反映される（Phase21）。ただし電源再投入をまたいだ永続化はしていない（`CanLinkState`・DTC相当の記録とも、プログラム起動のたびに初期状態から再開する）
 - ファン制御ECUは、ゲージデータ・警告灯データのどちらかの途絶が確定するとファンONにして記録し、正常受信に復帰すると通常の判断に戻る
 - メーターECUは、ファン状態の途絶が確定するとファン制御ECUの異常として記録・表示する
+- 実行の途中でエンジンを切ってかけ直すと、受信するECUも起動したときと同じく途絶の判断をやり直す（切る前に受け取れなかった回数を足さない。途絶のままかけ直し、途絶が続いていれば、もう1回数える）
 
-備考：`can_fault.txt`が無ければ、イグニッションON/OFFの仕組み上送受信が同時に止まり・復帰するためTimeout/Invalid Dataは自然発生しない（Phase22のFault Injectionで初めて`make run`上で再現できる）。Invalid Data注入（`MODE=CORRUPT`）はEngineStatusのみ対応する。FaultStatus・FanStatusはビットフラグのみでInvalid Data判定ロジックが無いため対象外で、`MODE=CORRUPT`と`TARGET=FAULT_STATUS`・`TARGET=FAN_STATUS`の組み合わせは無効として注入なし扱いになる。ファン状態の途絶（`MODE=DROP`+`TARGET=FAN_STATUS`、Phase26）は`make run`で再現できる（Phase22拡張バックログ）
+備考：`can_fault.txt`が無ければ、イグニッションON/OFFの仕組み上送受信が同時に止まり・復帰するためTimeout/Invalid Dataは自然発生しない（Phase22のFault Injectionで初めて`make run`上で再現できる）。Invalid Data注入（`MODE=CORRUPT`）はEngineStatusのみ対応する。FaultStatus・FanStatusはビットフラグのみでInvalid Data判定ロジックが無いため対象外で、`MODE=CORRUPT`と`TARGET=FAULT_STATUS`・`TARGET=FAN_STATUS`の組み合わせは無効として注入なし扱いになる。ファン状態の途絶（`MODE=DROP`+`TARGET=FAN_STATUS`、Phase26）は`make run`で再現できる（Phase22拡張バックログ）。かけ直したときの途絶の判断のやり直しは、`make scenario`（`test_power_cycle.py`、仮想時間版）で自動検証している
 
 ---
 
@@ -220,6 +222,6 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 
 オーバーヒートの期待結果も、`make scenario`で自動検証している（仮想時間版）。オーバーヒートの途中で水温センサが故障し、高温のまま直る場合も確かめている。
 
-電源再投入の期待結果も、`make scenario`（Phase25）で自動検証している。同じディレクトリで3回続けて起動し（水温CRITICALでON→OFF→値を変えたCRITICALでON）、2回目はOFFのままDTCが更新されないことを利用して、起動直後に読み込まれた内容を確認する。期待結果のうちメーターECUの通信異常の記録は、Phase25で通信故障を対象外としたため自動検証していない。
+電源再投入の期待結果も、`make scenario`（Phase25）で自動検証している。同じディレクトリで3回続けて起動し（水温CRITICALでON→OFF→値を変えたCRITICALでON）、2回目はOFFのままDTCが更新されないことを利用して、起動直後に読み込まれた内容を確認する。実行の途中でエンジンを切ってかけ直す場合も、`IGNITION@N`行で確かめている（仮想時間版）。期待結果のうちメーターECUの通信異常の記録は、Phase25で通信故障を対象外としたため自動検証していない。
 
 設定ファイル異常時のフェイルセーフは、センサ値の注入ではなくconfig.txtファイル自体の有無・内容を変えることで再現する（test/test_config.cの`write_raw`と同じやり方）。Phase11の対象には含めない。このシナリオの期待結果は、`make scenario`（Phase25）で自動検証している。

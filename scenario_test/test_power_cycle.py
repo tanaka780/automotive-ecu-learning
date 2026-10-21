@@ -12,6 +12,10 @@
 これは仮想時間版（sensor_sim_virtual）で実行する。確かめたいのは保存ファイルの読み込みと起動時自己診断の配線で、
 本番版と同じコードのため。仮想時間版は出力が毎回同じで、数ミリ秒で終わる。
 
+プログラムを起動し直さず、実行の途中でエンジンを切ってかけ直した場合（IGNITION@N行）も、起動し直したときと
+同じく数え直し、故障の確定をやり直すことを確認する（仮想時間版。何サンプル目に確定するかまで照合するため）。
+通信の途絶の途中でかけ直した場合に、受信するECUが途絶の判断をやり直すことも、同じく確認する。
+
 期待結果のうち「メーターECUの通信異常の記録は永続化していない」は、Phase25で対象外とした
 通信故障に当たるため検証しない。
 """
@@ -23,7 +27,7 @@ import unittest
 # リポジトリ直下からモジュール名で実行した場合（python3 -m unittest scenario_test.test_xxx）も
 # sensor_sim_runnerが見つかるよう、このフォルダをimportの検索先に加える
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sensor_sim_runner import SENSOR_SIM_VIRTUAL, run_in_dir
+from sensor_sim_runner import SENSOR_SIM_VIRTUAL, run_in_dir, run_sensor_sim
 
 # 開ければ読み込めた扱いになるconfig.txt（POSTの結果をdtc_data.txtの有無だけで決めるために置く）
 VALID_CONFIG = "LOG_LEVEL=0\n"
@@ -136,6 +140,119 @@ class OldFormatSaveFileTest(unittest.TestCase):
         self.assertIn("[DTC] TempSensor NONE     occurrences: 0", self.lines)
         self.assertIn("[DTC] Overheat   NONE     occurrences: 0", self.lines)
         self.assertIn("[DTC] Freeze Frame: not captured (no DTC occurred)", self.lines)
+
+
+# 5秒目にエンジンを切り、8秒目にかけ直す（5〜7サンプル目はOFF）。値は最後まで変えない
+RESTART_LINES = "IGNITION=ON\nIGNITION@5=OFF\nIGNITION@8=ON\n"
+OVERHEAT_RESTART_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=115\n" + RESTART_LINES
+OPEN_RESTART_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=OPEN\n" + RESTART_LINES
+SPEED_RESTART_FIXTURE = "MODE=FIXED\nSPEED=110\nRPM=2000\nTEMP=70\n" + RESTART_LINES
+
+
+def split_samples(lines):
+    """標準出力の行を、"[Sample NN]"ごとに{サンプル番号: その間に出た行のリスト}へ分ける
+    （test_fault_occurrence.pyと同じ。"--- Stats"以降はどのサンプルにも含めない）。"""
+    samples = {}
+    current = None
+    for line in lines:
+        if line.startswith("[Sample "):
+            current = int(line[len("[Sample "):-1])
+            samples[current] = []
+        elif line.startswith("--- Stats"):
+            current = None
+        elif current is not None:
+            samples[current].append(line)
+    return samples
+
+
+class InRunRestartTest(unittest.TestCase):
+    """実行の途中でエンジンを切ってかけ直すと、起動し直したときと同じく数え直し、故障の確定をやり直す。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.overheat = run_sensor_sim({"fixture.txt": OVERHEAT_RESTART_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.open = run_sensor_sim({"fixture.txt": OPEN_RESTART_FIXTURE}, SENSOR_SIM_VIRTUAL)
+        cls.speed = run_sensor_sim({"fixture.txt": SPEED_RESTART_FIXTURE}, SENSOR_SIM_VIRTUAL)
+
+    def test_runs_with_restart(self):
+        """前提：3つとも最後まで動き、5秒目に切って8秒目にかけ直す"""
+        for result in (self.overheat, self.open, self.speed):
+            self.assertEqual(0, result.returncode)
+            samples = split_samples(result.stdout.splitlines())
+            self.assertIn("[IGN] ON -> OFF", samples[5])
+            self.assertIn("[IGN] OFF -> ON", samples[8])
+
+    def test_overheat_counted_again(self):
+        """115℃のまま：かけ直した後もオーバーヒートなら2回目を数え、フリーズフレームは最初のまま"""
+        lines = self.overheat.stdout.splitlines()
+        self.assertIn("[DTC] Overheat   ACTIVE   occurrences: 2", lines)
+        self.assertIn("[DTC] Freeze Frame (trigger: Overheat) Speed: 50 km/h RPM:2000 Temp:115 C", lines)
+
+    def test_temp_sensor_fault_confirmed_again(self):
+        """最初から断線：かけ直した8秒目から数え直し、10秒目にもう一度確定する（解ける行は出ない）"""
+        lines = self.open.stdout.splitlines()
+        samples = split_samples(lines)
+        confirmed = [n for n, s in samples.items() if "[FAULT] Degraded: Temp" in s]
+        self.assertEqual([3, 10], confirmed)
+        self.assertFalse(any(line.startswith("[FAULT] Recovered") for line in lines))
+        self.assertIn("[DTC] TempSensor ACTIVE   occurrences: 2", lines)
+
+    def test_speed_fault_confirmed_again(self):
+        """車速110のまま：かけ直した後、確定し直すまで（8・9秒目）は、メーターに本当の車速と故障なしが届く"""
+        samples = split_samples(self.speed.stdout.splitlines())
+        confirmed = [n for n, s in samples.items() if "[FAULT] Degraded: Speed" in s]
+        self.assertEqual([3, 10], confirmed)
+        for n in (8, 9):
+            self.assertIn("[METER] EngineStatus[OK] speed=110 rpm=2000 temp=70", samples[n])
+            self.assertIn("[METER] FaultStatus[OK] speed=0 rpm=0 temp=0 overheat=0", samples[n])
+            self.assertNotIn("[METER] FaultStatus[OK] speed=1 rpm=0 temp=0 overheat=0", samples[n])
+        self.assertIn("[METER] EngineStatus[OK] speed=0 rpm=2000 temp=70", samples[10])
+        self.assertIn("[DTC] Speed      ACTIVE   occurrences: 2", self.speed.stdout.splitlines())
+
+
+# 通信の途絶の途中でかけ直す2条件。値は正常のまま、can_fault.txtでゲージデータの送信を止める
+NORMAL_RESTART_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=70\n" + RESTART_LINES
+# 2.5秒目から止める：切る前に受け取れないのは4サンプル目の1回だけで、まだ途絶にならない
+DROP_BEFORE_OFF = "MODE=DROP\nTARGET=ENGINE_STATUS\nSTART_MS=2500\nEND_MS=14500\n"
+# 0.5秒目から止める：切る前（4サンプル目）に途絶と確定し、途絶のまま切ってかけ直す
+DROP_ACROSS_OFF = "MODE=DROP\nTARGET=ENGINE_STATUS\nSTART_MS=500\nEND_MS=14500\n"
+LINK_ECUS = ("[CAN]", "[FAN]")   # 途絶を見つけて記録する、メーターECU役とファン制御ECU役
+
+
+class InRunRestartLinkTest(unittest.TestCase):
+    """通信の途絶の途中でかけ直すと、受信するECUも起動したときと同じく、かけ直してから3回受け取れないときに途絶とする。
+    通信故障はPhase25で対象外としたが、かけ直したときの扱いをエンジン監視ECUとそろえたことを確かめるため、ここで扱う。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.before_off = run_sensor_sim({"fixture.txt": NORMAL_RESTART_FIXTURE, "can_fault.txt": DROP_BEFORE_OFF},
+                                        SENSOR_SIM_VIRTUAL)
+        cls.across_off = run_sensor_sim({"fixture.txt": NORMAL_RESTART_FIXTURE, "can_fault.txt": DROP_ACROSS_OFF},
+                                        SENSOR_SIM_VIRTUAL)
+
+    @staticmethod
+    def samples_with(result, line):
+        return [n for n, s in split_samples(result.stdout.splitlines()).items() if line in s]
+
+    def test_runs_with_restart(self):
+        """前提：2つとも最後まで動き、14.5秒目に送信が戻って18サンプル目に復帰する"""
+        for result in (self.before_off, self.across_off):
+            self.assertEqual(0, result.returncode)
+            for ecu in LINK_ECUS:
+                self.assertEqual([18], self.samples_with(result, f"{ecu} EngineStatus link recovered"))
+
+    def test_count_before_off_not_added(self):
+        """切る前に受け取れなかった1回を足さず、かけ直した8サンプル目から3回目の10サンプル目に途絶とする"""
+        for ecu in LINK_ECUS:
+            self.assertEqual([10], self.samples_with(self.before_off, f"{ecu} EngineStatus link lost"))
+
+    def test_lost_across_off_counted_again(self):
+        """切る前の途絶はかけ直すと解け（ログは出ない）、途絶が続いていれば10サンプル目にもう1回数える"""
+        lines = self.across_off.stdout.splitlines()
+        for ecu in LINK_ECUS:
+            self.assertEqual([4, 10], self.samples_with(self.across_off, f"{ecu} EngineStatus link lost"))
+        self.assertIn("[CAN-DTC] EngineStatus  HISTORY  link lost occurrences: 2", lines)
+        self.assertIn("[FAN-DTC] EngineStatus  HISTORY  link lost occurrences: 2", lines)
 
 
 if __name__ == "__main__":

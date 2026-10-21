@@ -199,6 +199,34 @@ static void test_rpm_lifecycle_and_freeze_frame(void) {
     TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.trigger == DTC_ID_RPM, "Sample7後: フリーズフレームの原因は依然RPM(上書きされない)");
 }
 
+/* エンジンをかけ直したとき（diag_reset_previous）は前回の異常の有無だけが戻り、回数・状態区分・フリーズフレームは残る。
+   そのため、かけ直した後も異常が続いていれば、異常に入った瞬間としてもう1回数えることを確認する */
+static void test_reset_previous_counts_again(void) {
+    DtcRecord dtc;
+    diag_init(&dtc);
+
+    test_feed(&dtc, 110, 2000, 70);   /* Sample1: 車速の危険に入った瞬間 */
+    test_feed(&dtc, 110, 2000, 70);   /* Sample2: 危険が続く */
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_SPEED].count, "前提: 危険が続いても1回");
+
+    diag_reset_previous(&dtc);
+    bool all_reset = true;
+    for (int i = 0; i < (int)DTC_ID_COUNT; i++) {
+        if (dtc.previous_bad[i]) {
+            all_reset = false;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(all_reset, "かけ直し後: 前回の異常の有無は全て異常なし");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.entries[DTC_ID_SPEED].count, "かけ直し後: 回数は残る");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.entries[DTC_ID_SPEED].status == DTC_ACTIVE, "かけ直し後: 状態区分は残る");
+    TEST_ASSERT_TRUE_MESSAGE(dtc.freeze_frame.captured && (dtc.freeze_frame.trigger == DTC_ID_SPEED),
+                             "かけ直し後: フリーズフレームは残る");
+
+    test_feed(&dtc, 115, 2000, 70);   /* かけ直した後も危険（値を変えて、フリーズフレームの上書きを見分ける） */
+    TEST_ASSERT_EQUAL_MESSAGE(2, dtc.entries[DTC_ID_SPEED].count, "かけ直し後も危険なら、もう1回数える");
+    TEST_ASSERT_EQUAL_MESSAGE(110, dtc.freeze_frame.data.speed, "フリーズフレームは最初の1回のまま");
+}
+
 /* CRITICALから完全にNORMALへ戻らずWARNINGどまりでも、ACTIVE→HISTORYへ遷移することを確認する */
 static void test_active_to_history_via_warning(void) {
     DtcRecord dtc;
@@ -268,6 +296,7 @@ int main(void) {
     RUN_TEST(test_temp_records_counted_separately);
     RUN_TEST(test_overheat_record_follows_given_flag);
     RUN_TEST(test_rpm_lifecycle_and_freeze_frame);
+    RUN_TEST(test_reset_previous_counts_again);
     RUN_TEST(test_active_to_history_via_warning);
     RUN_TEST(test_freeze_frame_not_captured_without_critical);
     RUN_TEST(test_freeze_frame_tie_break_speed_vs_rpm);

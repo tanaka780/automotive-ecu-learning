@@ -94,6 +94,15 @@ static void run_sample_cycle(void *context) {
     ignition_print(ctx->ignition);                    /* イグニッション状態を表示する (読む) */
     ignition_check(ctx->ignition);                     /* 遷移した瞬間だけイベントを表示する (読む) */
 
+    /* エンジンをかけ直した瞬間（OFF→ON）は、ECUが通電し直したので、判断の状態を起動したときと同じに戻す。
+       故障の確定・連続回数・直前の値と、記録の前回の異常の有無を戻し、記録の回数・状態区分・フリーズフレームと
+       統計は残す（記録は起動し直したときも保存ファイルから引き継ぐ。統計はPhase4で続けて数えると決めた）。
+       ファン制御ECU役がかけ直したときに判断の状態を戻すのと同じ考え方。ログは出さない（切っている間に直ったわけではないため） */
+    if ((ctx->ignition->previous == IGNITION_OFF) && (ctx->ignition->current == IGNITION_ON)) {
+        faultmgr_init(ctx->fault_mgr);
+        diag_reset_previous(ctx->dtc);
+    }
+
     /* OFF中はECU自体が通電していない状態を再現し、センサ更新以降の処理を全てスキップする */
     if (ctx->ignition->current == IGNITION_ON) {
         if (!ctx->fixture_fixed) {
@@ -236,6 +245,8 @@ int main(void) {
     can_monitor_init(&can_monitor);
     CanDtcRecord can_dtc;              /* CAN通信リンクのDTC相当の記録（発生回数・状態区分、Phase21） */
     can_diag_init(&can_dtc);
+    MeterState meter_state;            /* メーターECU役の状態（エンジンのかけ直しを見つけるため、Phase28の完了後） */
+    meter_init(&meter_state);
     /* ファン制御ECU役の受信監視状態とDTC相当の記録（Phase26）。途絶は検知したECUごとに持つため、
        メーターECU役のものとは分ける */
     CanMonitor fan_can_monitor;
@@ -283,6 +294,7 @@ int main(void) {
         .can_bus     = &can_bus,
         .can_monitor = &can_monitor,
         .can_dtc     = &can_dtc,
+        .state       = &meter_state,
     };
     /* 受信タスク(ファン制御ECU役)用。警告灯・ゲージの両受信タスクで共有する（Phase26） */
     FanEcuContext fan_ctx = {

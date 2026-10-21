@@ -183,6 +183,28 @@ static void test_ignition_cycle_discards_old_temp(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "新しく届いた水温で判断を再開する");
 }
 
+/* イグニッションOFF→ONで、受信監視状態の途絶の連続回数も戻す。切る前に受け取れなかった回数を足さず、
+   かけ直した後に3回続けて受け取れなかったときに途絶とし、記録する（Phase28の完了後） */
+static void test_ignition_cycle_restarts_link_count(void) {
+    receive_engine(FAN_ON_TEMP);
+    fan_ecu_receive_engine_status(&ctx);   /* 新しいゲージデータが届かない（1回目） */
+    fan_ecu_receive_engine_status(&ctx);   /* 2回目。あと1回で途絶 */
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_ENGINE_STATUS], "前提: 2回ではまだ途絶でない");
+
+    ignition.current = IGNITION_OFF;
+    fan_ecu_receive_fault_status(&ctx);
+    ignition.current = IGNITION_ON;
+
+    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_engine_status(&ctx);
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_ENGINE_STATUS], "かけ直し後の2回目まではOK（切る前の2回を足さない）");
+    TEST_ASSERT_EQUAL_MESSAGE(0, dtc.count[CAN_MSG_ENGINE_STATUS], "まだ記録しない");
+
+    fan_ecu_receive_engine_status(&ctx);
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_LOST, monitor.state[CAN_MSG_ENGINE_STATUS], "かけ直し後の3回目で途絶");
+    TEST_ASSERT_EQUAL_MESSAGE(1, dtc.count[CAN_MSG_ENGINE_STATUS], "途絶を1回記録する");
+}
+
 /* イグニッションOFF中は受信も判断もしない（未受信を数えず、途絶も記録しない） */
 static void test_nothing_while_ignition_off(void) {
     ignition.current = IGNITION_OFF;
@@ -305,6 +327,7 @@ int main(void) {
     RUN_TEST(test_fault_status_lost_forces_on);
     RUN_TEST(test_engine_status_lost_forces_on);
     RUN_TEST(test_ignition_cycle_discards_old_temp);
+    RUN_TEST(test_ignition_cycle_restarts_link_count);
     RUN_TEST(test_nothing_while_ignition_off);
     RUN_TEST(test_send_value_follows_output);
     RUN_TEST(test_send_value_during_forced_on);

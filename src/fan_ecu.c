@@ -20,8 +20,9 @@ void fan_ecu_init(FanEcuState *state) {
     state->output         = FAN_OFF;
 }
 
-/* イグニッションON中ならtrueを返す。OFF→ONに変わった最初の呼び出しで、判断の状態を初期値に戻す。
-   受信監視状態とDTC相当の記録は戻さない。busはOFFの間も最後のフレームを持ち続けるので、
+/* イグニッションON中ならtrueを返す。OFF→ONに変わった最初の呼び出しで、判断の状態を初期値に戻し、
+   受信監視状態は途絶の連続回数と途絶の状態だけを戻す（can_monitor_restart）。DTC相当の記録は戻さない。
+   送信時刻の記録も戻さない。busはOFFの間も最後のフレームを持ち続けるので、
    送信時刻の記録を戻すと、OFF前の古いフレームを新しいものと見誤るため。
    OFFの間に一度は呼ばれることが前提（イグニッションはサンプル周期(1000ms)でしか変わらず、
    警告灯データの受信は200ms周期で呼ばれるので、今の構成では見逃さない） */
@@ -32,6 +33,7 @@ static bool fan_ecu_is_powered(FanEcuContext *ctx) {
     }
     if (!ctx->state->powered) {
         fan_ecu_init(ctx->state);
+        can_monitor_restart(ctx->can_monitor);
         ctx->state->powered = true;
     }
     return true;
