@@ -207,9 +207,10 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 - Timeout/Invalid Dataの確定・復帰は、DTC相当の記録（`can_diag.c`、発生回数・状態区分NONE/ACTIVE/HISTORY）にも反映される（Phase21）。DTC相当の記録は、それぞれのECUのファイルに保存し、次の起動で引き継ぐ（Phase29）。`CanLinkState`は保存せず、プログラム起動のたびに初期状態から再開する
 - ファン制御ECUは、ゲージデータ・警告灯データのどちらかの途絶が確定するとファンONにして記録し、正常受信に復帰すると通常の判断に戻る
 - メーターECUは、ファン状態の途絶が確定するとファン制御ECUの異常として記録・表示する
+- 警告灯データの途絶中は、メーターECUは水温を「--」と表示する（届いた水温が本当の値か、差し替えた常温かが分からないため）。ファン制御ECUは途絶中に届いた水温を使わず、回復後は途絶前の判断の続きから判断する
 - 実行の途中でエンジンを切ってかけ直すと、受信するECUも起動したときと同じく途絶の判断をやり直す（切る前に受け取れなかった回数を足さない。途絶のままかけ直し、途絶が続いていれば、もう1回数える）
 
-備考：`can_fault.txt`が無ければ、イグニッションON/OFFの仕組み上送受信が同時に止まり・復帰するためTimeout/Invalid Dataは自然発生しない（Phase22のFault Injectionで初めて`make run`上で再現できる）。Invalid Data注入（`MODE=CORRUPT`）はEngineStatusのみ対応する。FaultStatus・FanStatusはビットフラグのみでInvalid Data判定ロジックが無いため対象外で、`MODE=CORRUPT`と`TARGET=FAULT_STATUS`・`TARGET=FAN_STATUS`の組み合わせは無効として注入なし扱いになる。ファン状態の途絶（`MODE=DROP`+`TARGET=FAN_STATUS`、Phase26）は`make run`で再現できる（Phase22拡張バックログ）。かけ直したときの途絶の判断のやり直しは、`make scenario`（`test_power_cycle.py`、仮想時間版）で自動検証している
+備考：`can_fault.txt`が無ければ、イグニッションON/OFFの仕組み上送受信が同時に止まり・復帰するためTimeout/Invalid Dataは自然発生しない（Phase22のFault Injectionで初めて`make run`上で再現できる）。Invalid Data注入（`MODE=CORRUPT`）はEngineStatusのみ対応する。FaultStatus・FanStatusはビットフラグのみでInvalid Data判定ロジックが無いため対象外で、`MODE=CORRUPT`と`TARGET=FAULT_STATUS`・`TARGET=FAN_STATUS`の組み合わせは無効として注入なし扱いになる。ファン状態の途絶（`MODE=DROP`+`TARGET=FAN_STATUS`、Phase26）は`make run`で再現できる（Phase22拡張バックログ）。かけ直したときの途絶の判断のやり直しは、`make scenario`（`test_power_cycle.py`、仮想時間版）で自動検証している。警告灯データの途絶中のメーターの水温の表示も、`make scenario`（`test_fault_occurrence.py`、仮想時間版）で自動検証している
 
 ---
 

@@ -27,7 +27,7 @@ static bool meter_is_powered(MeterContext *ctx) {
 }
 
 /* 受信したゲージデータとリンク状態を1行でコンソールに出力する。
-   temp_unknownがtrue（水温センサの確定異常の通知を受けている間）は、水温を"--"と表示する（Phase27）。
+   temp_unknownがtrue（水温センサの確定異常の通知を受けている間、Phase27。警告灯データが途絶している間も）は、水温を"--"と表示する。
    ゲージデータの水温はフェイルセーフ値（常温相当）に差し替わっており、本当の水温は分からない。
    水温センサの故障の後にオーバーヒートしても見分けられないため、常温の値を見せて安心させない */
 static void meter_print_engine_status(const CanEngineStatus *status, CanLinkState state, bool temp_unknown) {
@@ -96,8 +96,12 @@ void meter_receive_engine_status(MeterContext *ctx) {
         }
         can_diag_check(ctx->can_dtc, CAN_MSG_ENGINE_STATUS, previous, state);
         /* 水温が分からないかは、最後に受け取った警告灯データの水温のビットで決める（Phase27）。
-           警告灯データの受信タスクが先に動くため、確定・復帰の秒には、その秒のビットで表示が切り替わる */
-        meter_print_engine_status(&status, state, ctx->can_monitor->last_fault_status.fault_temp);
+           警告灯データの受信タスクが先に動くため、確定・復帰の秒には、その秒のビットで表示が切り替わる。
+           警告灯データが途絶している間は、届いた水温が本当の値か差し替えた常温かが分からないので、「--」にする
+           （途絶前のビットのままだと、途絶中にセンサが壊れたとき常温を表示してしまうため） */
+        bool temp_unknown = ctx->can_monitor->last_fault_status.fault_temp
+                            || (ctx->can_monitor->state[CAN_MSG_FAULT_STATUS] == CAN_LINK_LOST);
+        meter_print_engine_status(&status, state, temp_unknown);
     }
 }
 

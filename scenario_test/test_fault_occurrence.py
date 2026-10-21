@@ -379,5 +379,48 @@ class OverheatOneSecondTest(unittest.TestCase):
         self.assertIn("[DTC] Overheat   HISTORY  occurrences: 1", self.lines)
 
 
+# 警告灯データ（確定異常のビット）の送信だけを2.5〜12.5秒目に止める。ゲージデータ（水温の値）は届き続ける
+DROP_FAULT_STATUS = "MODE=DROP\nTARGET=FAULT_STATUS\nSTART_MS=2500\nEND_MS=12500\n"
+# 途絶中に水温センサが壊れる（5秒目に断線）。7秒目に確定し、ゲージデータの水温は常温（25）に差し替わる
+BREAK_DURING_LOSS_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=70\nTEMP@5=OPEN\nIGNITION=ON\n"
+NORMAL_FIXTURE = "MODE=FIXED\nSPEED=50\nRPM=2000\nTEMP=70\nIGNITION=ON\n"
+METER_TEMP_UNKNOWN = "[METER] EngineStatus[OK] speed=50 rpm=2000 temp=--"
+METER_TEMP_70 = "[METER] EngineStatus[OK] speed=50 rpm=2000 temp=70"
+
+
+class FaultStatusLostMeterTest(unittest.TestCase):
+    """警告灯データが途絶している間は、届いた水温が本当の値か差し替えた常温か分からないので、メーターは「--」と表示する
+    （仮想時間版、Phase29の完了後）。途絶前のビットのままだと、途絶中にセンサが壊れたとき常温（25）を表示していた"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.normal = run_sensor_sim({"fixture.txt": NORMAL_FIXTURE, "can_fault.txt": DROP_FAULT_STATUS}, SENSOR_SIM_VIRTUAL)
+        cls.broken = run_sensor_sim({"fixture.txt": BREAK_DURING_LOSS_FIXTURE, "can_fault.txt": DROP_FAULT_STATUS},
+                                    SENSOR_SIM_VIRTUAL)
+
+    @staticmethod
+    def samples_with(result, line):
+        return [n for n, s in split_samples(result.stdout.splitlines()).items() if line in s]
+
+    def test_loss_and_recovery_samples(self):
+        """前提：2つとも4サンプル目に途絶、14サンプル目に回復する"""
+        for result in (self.normal, self.broken):
+            self.assertEqual(0, result.returncode)
+            self.assertEqual([4], self.samples_with(result, "[CAN] FaultStatus link lost"))
+            self.assertEqual([14], self.samples_with(result, "[CAN] FaultStatus link recovered"))
+
+    def test_temp_unknown_only_while_lost(self):
+        """水温が正常のまま：途絶している4〜13サンプル目だけ「--」で、前後は本当の水温"""
+        self.assertEqual(list(range(4, 14)), self.samples_with(self.normal, METER_TEMP_UNKNOWN))
+        self.assertEqual([1, 2, 3] + list(range(14, 21)), self.samples_with(self.normal, METER_TEMP_70))
+
+    def test_no_room_temperature_shown_when_sensor_breaks_during_loss(self):
+        """途絶中にセンサが壊れても、差し替えた常温（25）を表示しない。回復後は確定異常の通知で「--」のまま"""
+        lines = self.broken.stdout.splitlines()
+        self.assertIn("[FAULT] Degraded: Temp", split_samples(lines)[7])
+        self.assertFalse([line for line in lines if line.startswith("[METER] EngineStatus") and "temp=25" in line])
+        self.assertEqual(list(range(4, 21)), self.samples_with(self.broken, METER_TEMP_UNKNOWN))
+
+
 if __name__ == "__main__":
     unittest.main()
