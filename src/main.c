@@ -187,6 +187,14 @@ static void run_fan_send_fan_status(void *context) {
     }
 }
 
+/* Schedulerに登録するタスク1個分（関数・context・周期）。登録を表にしてループで回し、
+   どれか1つでも登録できなければ起動しないようにするために使う（Phase30） */
+typedef struct {
+    SchedulerTaskFunc func;
+    void             *context;
+    uint32_t          period_ms;
+} MainTaskEntry;
+
 int main(void) {
     /* srand: time(NULL) を種にすることで実行ごとに異なる乱数列を生成する */
     srand((unsigned int)time(NULL));
@@ -317,18 +325,29 @@ int main(void) {
 
     Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
     scheduler_init(&scheduler);
-    /* SCHEDULER_MAX_TASKS(8)に対し登録は8個（サンプル1・CAN送信1・メーターECU受信2・ファン制御ECU受信2・
-       ファン制御ECU送信1・メーターECUのファン状態受信1）で、上限ちょうど。いずれも失敗は想定していない
-       （MISRA 17.7）。Phase26で足したタスクは既存4タスクの後に登録し、既存の登録順は変えない。
-       メーターECUのファン状態受信は、同じ周期のファン状態送信の後に登録する */
-    (void)scheduler_add_task(&scheduler, run_sample_cycle, &ctx, SAMPLE_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_can_send_fault_status, &can_send_fault_ctx, CAN_FAULT_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_can_receive_fault_status, &can_receive_ctx, CAN_FAULT_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_can_receive_engine_status, &can_receive_ctx, SAMPLE_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_fan_receive_fault_status, &fan_ctx, CAN_FAULT_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_fan_receive_engine_status, &fan_ctx, SAMPLE_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_fan_send_fan_status, &fan_send_ctx, SAMPLE_PERIOD_MS);
-    (void)scheduler_add_task(&scheduler, run_can_receive_fan_status, &can_receive_ctx, SAMPLE_PERIOD_MS);
+    /* 登録は8個（サンプル1・CAN送信1・メーターECU受信2・ファン制御ECU受信2・ファン制御ECU送信1・
+       メーターECUのファン状態受信1）。Phase26で足したタスクは既存4タスクの後に登録し、既存の登録順は変えない。
+       メーターECUのファン状態受信は、同じ周期のファン状態送信の後に登録する。
+       上限(SCHEDULER_MAX_TASKS)を超えて登録できなかったタスクがあると、その処理が抜けたまま動いてしまうので、
+       起動しない（Phase30。それまでは戻り値を捨てていたため、上限を超えても気づけなかった）。
+       表をconstにすると、cppcheckのMISRAアドオンが、contextを渡すところをconstを外すキャスト（11.8）と
+       誤って報告するため、constは付けない */
+    MainTaskEntry task_entries[] = {
+        { run_sample_cycle,              &ctx,                SAMPLE_PERIOD_MS },
+        { run_can_send_fault_status,     &can_send_fault_ctx, CAN_FAULT_PERIOD_MS },
+        { run_can_receive_fault_status,  &can_receive_ctx,    CAN_FAULT_PERIOD_MS },
+        { run_can_receive_engine_status, &can_receive_ctx,    SAMPLE_PERIOD_MS },
+        { run_fan_receive_fault_status,  &fan_ctx,            CAN_FAULT_PERIOD_MS },
+        { run_fan_receive_engine_status, &fan_ctx,            SAMPLE_PERIOD_MS },
+        { run_fan_send_fan_status,       &fan_send_ctx,       SAMPLE_PERIOD_MS },
+        { run_can_receive_fan_status,    &can_receive_ctx,    SAMPLE_PERIOD_MS },
+    };
+    for (size_t i = 0U; i < (sizeof(task_entries) / sizeof(task_entries[0])); i++) {
+        if (!scheduler_add_task(&scheduler, task_entries[i].func, task_entries[i].context, task_entries[i].period_ms)) {
+            log_print_leveled(LOG_ERROR, "SCHED", "Task registration failed (task table full), not starting");
+            return 1;
+        }
+    }
 
     /* main.c は処理の順序制御のみ。各処理の詳細はモジュールに書く。
        CAN送受信タスク（200ms周期）がsample_cycle（1000ms周期）より高頻度で混在するため、

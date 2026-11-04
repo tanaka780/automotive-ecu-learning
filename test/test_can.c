@@ -285,6 +285,138 @@ static void test_fan_status_timeout_after_missed_receptions(void) {
     TEST_ASSERT_TRUE_MESSAGE(state == CAN_LINK_LOST, "3回連続で未受信ならCAN_LINK_LOSTに確定する");
 }
 
+/* can_bus_init直後は、診断の要求・応答もvalid=falseで、読んでも何も受け取らないことを確認する（Phase30） */
+static void test_diag_init_nothing_to_receive(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    uint32_t last_seen = 0U;
+    uint8_t  payload[CAN_DIAG_SF_MAX_LEN];
+    uint8_t  len = 0U;
+
+    TEST_ASSERT_FALSE_MESSAGE(bus.diag_request.valid, "init直後は要求がvalid=false");
+    TEST_ASSERT_FALSE_MESSAGE(bus.diag_response.valid, "init直後は応答がvalid=false");
+    TEST_ASSERT_FALSE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "送られていなければ受け取らない");
+}
+
+/* 要求を1フレームで送ると、ID・DLC・data[0]（長さ）が決めた形になり、中身がそのまま読めることを確認する。
+   周期のメッセージの枠と応答の枠には書かれないことも確認する（Phase30） */
+static void test_diag_request_roundtrip(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    const uint8_t request[] = { 0x19U, 0x01U, 0x21U };
+
+    TEST_ASSERT_TRUE_MESSAGE(can_send_diag_request(&bus, request, 3U), "3バイトは1フレームで送れる");
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(CAN_ID_DIAG_REQUEST, bus.diag_request.id, "要求のIDは0x7E0");
+    TEST_ASSERT_EQUAL_MESSAGE(4, bus.diag_request.dlc, "DLCは長さの1バイト＋中身3バイト");
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x03U, bus.diag_request.data[0], "data[0]はSingle Frame（上位4ビット0）と長さ3");
+    TEST_ASSERT_FALSE_MESSAGE(bus.diag_response.valid, "応答の枠には書かれない");
+    for (int i = 0; i < (int)CAN_MSG_COUNT; i++) {
+        TEST_ASSERT_FALSE_MESSAGE(bus.frames[i].valid, "周期のメッセージの枠には書かれない");
+    }
+
+    uint32_t last_seen = 0U;
+    uint8_t  payload[CAN_DIAG_SF_MAX_LEN];
+    uint8_t  len = 0U;
+    TEST_ASSERT_TRUE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "新しい要求を受け取る");
+    TEST_ASSERT_EQUAL_MESSAGE(3, len, "受け取ったバイト数は3");
+    TEST_ASSERT_EQUAL_HEX8_ARRAY_MESSAGE(request, payload, 3, "中身がそのまま読める");
+}
+
+/* 応答は0x7E8で送られ、要求の枠には書かれないことを確認する（Phase30） */
+static void test_diag_response_roundtrip(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    const uint8_t response[] = { 0x7FU, 0x19U, 0x12U };
+
+    TEST_ASSERT_TRUE_MESSAGE(can_send_diag_response(&bus, response, 3U), "3バイトは1フレームで送れる");
+    TEST_ASSERT_EQUAL_HEX32_MESSAGE(CAN_ID_DIAG_RESPONSE, bus.diag_response.id, "応答のIDは0x7E8");
+    TEST_ASSERT_FALSE_MESSAGE(bus.diag_request.valid, "要求の枠には書かれない");
+
+    uint32_t last_seen = 0U;
+    uint8_t  payload[CAN_DIAG_SF_MAX_LEN];
+    uint8_t  len = 0U;
+    TEST_ASSERT_TRUE_MESSAGE(can_receive_diag_response(&bus, &last_seen, payload, &len), "新しい応答を受け取る");
+    TEST_ASSERT_EQUAL_MESSAGE(3, len, "受け取ったバイト数は3");
+    TEST_ASSERT_EQUAL_HEX8_ARRAY_MESSAGE(response, payload, 3, "中身がそのまま読める");
+}
+
+/* 同じフレームは1回しか受け取らず、新しく送られたら再び受け取ることを確認する（Phase30） */
+static void test_diag_request_received_once(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    const uint8_t request[] = { 0x14U, 0xFFU, 0xFFU, 0xFFU };
+    uint32_t last_seen = 0U;
+    uint8_t  payload[CAN_DIAG_SF_MAX_LEN];
+    uint8_t  len = 0U;
+
+    (void)can_send_diag_request(&bus, request, 4U);
+    TEST_ASSERT_TRUE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "1回目は受け取る");
+    TEST_ASSERT_FALSE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "同じフレームは2回受け取らない");
+
+    sleep_ms(5);   /* 前回と送信時刻(timestamp_ms)を変え、新しいフレームとして受け取らせる */
+    (void)can_send_diag_request(&bus, request, 4U);
+    TEST_ASSERT_TRUE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "新しく送られたら受け取る");
+}
+
+/* 長さ0と、1フレームに入らない8バイトは送らず、枠も書き換えないことを確認する（Phase30） */
+static void test_diag_send_rejects_bad_length(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    const uint8_t request[8] = { 0x19U, 0x02U, 0x09U, 0U, 0U, 0U, 0U, 0U };
+
+    TEST_ASSERT_FALSE_MESSAGE(can_send_diag_request(&bus, request, 0U), "長さ0は送らない");
+    TEST_ASSERT_FALSE_MESSAGE(can_send_diag_request(&bus, request, 8U), "8バイトは1フレームに入らないので送らない");
+    TEST_ASSERT_FALSE_MESSAGE(bus.diag_request.valid, "送らなかったときは枠を書き換えない");
+}
+
+/* 短い要求で上書きしたとき、前の長い要求の残りが後ろのバイトに残らないことを確認する（Phase30） */
+static void test_diag_send_clears_unused_bytes(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    const uint8_t long_request[]  = { 0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U };
+    const uint8_t short_request[] = { 0x3EU };
+
+    (void)can_send_diag_request(&bus, long_request, 7U);
+    TEST_ASSERT_EQUAL_MESSAGE(8, bus.diag_request.dlc, "7バイトならDLCは8");
+    (void)can_send_diag_request(&bus, short_request, 1U);
+
+    TEST_ASSERT_EQUAL_MESSAGE(2, bus.diag_request.dlc, "1バイトならDLCは2");
+    for (int i = 2; i < 8; i++) {
+        TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x00U, bus.diag_request.data[i], "使わない後ろのバイトは0");
+    }
+}
+
+/* 1フレームとして正しくない形（Single Frame以外・長さ0・DLCに収まらない長さ）は受け取らず、
+   同じフレームを読み直さないよう受け取り済みにすることを確認する（Phase30） */
+static void test_diag_receive_rejects_bad_frame(void) {
+    CanBus bus;
+    can_bus_init(&bus);
+    uint8_t  payload[CAN_DIAG_SF_MAX_LEN];
+    uint8_t  len = 0U;
+
+    /* 上位4ビットが2（Consecutive Frame：分割送信の2つ目以降のフレーム）。この段階では扱わない。
+       下位4ビットは連番の1で、長さとして読むと1になり、長さの確認だけでは見分けられない */
+    bus.diag_request.id           = CAN_ID_DIAG_REQUEST;
+    bus.diag_request.dlc          = 8U;
+    bus.diag_request.data[0]      = 0x21U;
+    bus.diag_request.timestamp_ms = 100U;
+    bus.diag_request.valid        = true;
+    uint32_t last_seen = 0U;
+    TEST_ASSERT_FALSE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "Single Frame以外は受け取らない");
+    TEST_ASSERT_EQUAL_MESSAGE(100, last_seen, "受け取らなかったフレームも受け取り済みとして記録する");
+
+    /* 長さ0 */
+    bus.diag_request.data[0]      = 0x00U;
+    bus.diag_request.timestamp_ms = 200U;
+    TEST_ASSERT_FALSE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "長さ0は受け取らない");
+
+    /* 長さ5なのにDLCが3（長さの1バイト＋中身2バイト分しか無い） */
+    bus.diag_request.dlc          = 3U;
+    bus.diag_request.data[0]      = 0x05U;
+    bus.diag_request.timestamp_ms = 300U;
+    TEST_ASSERT_FALSE_MESSAGE(can_receive_diag_request(&bus, &last_seen, payload, &len), "DLCに収まらない長さは受け取らない");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -302,6 +434,13 @@ int main(void) {
     RUN_TEST(test_fan_status_roundtrip_on);
     RUN_TEST(test_fan_status_roundtrip_off);
     RUN_TEST(test_fan_status_timeout_after_missed_receptions);
+    RUN_TEST(test_diag_init_nothing_to_receive);
+    RUN_TEST(test_diag_request_roundtrip);
+    RUN_TEST(test_diag_response_roundtrip);
+    RUN_TEST(test_diag_request_received_once);
+    RUN_TEST(test_diag_send_rejects_bad_length);
+    RUN_TEST(test_diag_send_clears_unused_bytes);
+    RUN_TEST(test_diag_receive_rejects_bad_frame);
 
     return UNITY_END();
 }

@@ -6,17 +6,24 @@
 /* このファイルは、フレームの読み書きと受信の監視（途絶・値域外）だけを担う。
    受信した値の表示はメーターECU役（meter.c）が、警告灯データの中身を作るのは送る側（main.c）が行う */
 
-/* busの全フレームをvalid=falseの初期状態にする */
+/* 1フレームをvalid=falseの初期状態にする */
+static void can_frame_init(CanFrame *frame) {
+    frame->id           = 0U;
+    frame->dlc          = 0U;
+    frame->timestamp_ms = 0U;
+    frame->valid        = false;
+    for (int b = 0; b < 8; b++) {
+        frame->data[b] = 0U;
+    }
+}
+
+/* busの全フレーム（周期のメッセージと、診断の要求・応答）をvalid=falseの初期状態にする */
 void can_bus_init(CanBus *bus) {
     for (int i = 0; i < (int)CAN_MSG_COUNT; i++) {
-        bus->frames[i].id           = 0U;
-        bus->frames[i].dlc          = 0U;
-        bus->frames[i].timestamp_ms = 0U;
-        bus->frames[i].valid        = false;
-        for (int b = 0; b < 8; b++) {
-            bus->frames[i].data[b] = 0U;
-        }
+        can_frame_init(&bus->frames[i]);
     }
+    can_frame_init(&bus->diag_request);
+    can_frame_init(&bus->diag_response);
 }
 
 /* monの状態を初期値（CAN_LINK_OK、カウンタ0、キャッシュ0相当）にリセットする */
@@ -184,4 +191,65 @@ CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanSt
 
     *out = mon->last_fan_status;
     return mon->state[CAN_MSG_FAN_STATUS];
+}
+
+/* 診断データを1フレーム（Single Frame）にしてframeへ書く。data[0]の上位4ビットの0がSingle Frameを、
+   下位4ビットが長さを表す。使わない後ろのバイトは0で埋め、前の要求の残りを読ませない（Phase30） */
+static bool can_diag_write(CanFrame *frame, uint32_t id, const uint8_t *payload, uint8_t len) {
+    if ((len == 0U) || (len > CAN_DIAG_SF_MAX_LEN)) {
+        return false;
+    }
+
+    frame->id      = id;
+    frame->dlc     = (uint8_t)(len + 1U);
+    frame->data[0] = len;
+    for (uint8_t i = 1U; i < 8U; i++) {
+        frame->data[i] = (i <= len) ? payload[i - 1U] : 0U;
+    }
+    frame->timestamp_ms = timer_get_elapsed_ms();
+    frame->valid        = true;
+    return true;
+}
+
+/* frameが新しく、1フレームとして正しい形なら、中身をpayloadに、バイト数をlenに入れる（Phase30）。
+   形が正しくないフレームは捨てるが、同じフレームを何度も読み直さないよう、受け取り済みとして記録する */
+static bool can_diag_read(const CanFrame *frame, uint32_t *last_seen_ms, uint8_t *payload, uint8_t *len) {
+    bool is_new = frame->valid && (frame->timestamp_ms != *last_seen_ms);
+    if (!is_new) {
+        return false;
+    }
+    *last_seen_ms = frame->timestamp_ms;
+
+    uint8_t frame_type = (uint8_t)(frame->data[0] >> 4);
+    uint8_t sf_len     = (uint8_t)(frame->data[0] & 0x0FU);
+    if ((frame_type != 0U) || (sf_len == 0U) || (sf_len > CAN_DIAG_SF_MAX_LEN)
+        || ((uint8_t)(sf_len + 1U) > frame->dlc)) {
+        return false;
+    }
+
+    for (uint8_t i = 0U; i < sf_len; i++) {
+        payload[i] = frame->data[i + 1U];
+    }
+    *len = sf_len;
+    return true;
+}
+
+/* スキャンツール役：診断の要求をbusへ書く（Phase30） */
+bool can_send_diag_request(CanBus *bus, const uint8_t *payload, uint8_t len) {
+    return can_diag_write(&bus->diag_request, CAN_ID_DIAG_REQUEST, payload, len);
+}
+
+/* エンジン監視ECU役：診断の応答をbusへ書く（Phase30） */
+bool can_send_diag_response(CanBus *bus, const uint8_t *payload, uint8_t len) {
+    return can_diag_write(&bus->diag_response, CAN_ID_DIAG_RESPONSE, payload, len);
+}
+
+/* エンジン監視ECU役：busから診断の要求を読む（Phase30） */
+bool can_receive_diag_request(const CanBus *bus, uint32_t *last_seen_ms, uint8_t *payload, uint8_t *len) {
+    return can_diag_read(&bus->diag_request, last_seen_ms, payload, len);
+}
+
+/* スキャンツール役：busから診断の応答を読む（Phase30） */
+bool can_receive_diag_response(const CanBus *bus, uint32_t *last_seen_ms, uint8_t *payload, uint8_t *len) {
+    return can_diag_read(&bus->diag_response, last_seen_ms, payload, len);
 }

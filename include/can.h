@@ -34,6 +34,14 @@ typedef enum {
 /* ファン状態(data[0])のビット割り当て（Phase26） */
 #define CAN_FAN_BIT_ON 0x01U
 
+/* 診断（UDS）の要求・応答のID（Phase30）。OBDのエンジンECU用の物理アドレスの慣例に合わせる。
+   周期のメッセージより値が大きいので、バス調停では後回しになる */
+#define CAN_ID_DIAG_REQUEST  0x7E0U
+#define CAN_ID_DIAG_RESPONSE 0x7E8U
+
+/* 1フレーム（Single Frame）で送れる診断データの最大バイト数。data[0]は長さに使うため、8-1=7 */
+#define CAN_DIAG_SF_MAX_LEN 7U
+
 /* Timeout/Invalid Dataの確定・復帰に必要な連続回数。faultmgr.cのDebounce/Recoveryと同じ3回 */
 #define CAN_DEBOUNCE_COUNT 3U
 #define CAN_RECOVERY_COUNT 3U
@@ -49,9 +57,13 @@ typedef struct {
     bool     valid;   /* まだ一度も送信されていない（起動直後）かどうかの判定用 */
 } CanFrame;
 
-/* バス役：メッセージごとに最新の1フレームだけを保持する（実プロセス分離無しの簡易モデル） */
+/* バス役：メッセージごとに最新の1フレームだけを保持する（実プロセス分離無しの簡易モデル）。
+   診断の要求・応答は、要求があったときだけ流れ、届かないのが普通なので、途絶の監視・記録・保存の対象に
+   しない。そのためframes（CanMessageIdの添字）には入れず、別の枠として持つ（Phase30） */
 typedef struct {
     CanFrame frames[CAN_MSG_COUNT];
+    CanFrame diag_request;    /* スキャンツール役→エンジン監視ECU */
+    CanFrame diag_response;   /* エンジン監視ECU→スキャンツール役 */
 } CanBus;
 
 /* 受信側が復元したゲージデータ */
@@ -118,5 +130,17 @@ CanLinkState can_receive_engine_status(CanMonitor *mon, const CanBus *bus, CanEn
 CanLinkState can_receive_fault_status(CanMonitor *mon, const CanBus *bus, CanFaultStatus *out);
 /* メーターECU役：busから最新のファン状態を読み、Timeoutを検知してmonの状態を更新する（Phase26） */
 CanLinkState can_receive_fan_status(CanMonitor *mon, const CanBus *bus, CanFanStatus *out);
+
+/* 診断の要求・応答（Phase30）。payload（UDSのサービスIDから始まるlenバイト）を、data[0]に長さを入れた
+   1フレーム（Single Frame）にしてbusへ書く。lenが0、またはCAN_DIAG_SF_MAX_LENを超える場合は書かずにfalseを返す */
+bool can_send_diag_request(CanBus *bus, const uint8_t *payload, uint8_t len);
+bool can_send_diag_response(CanBus *bus, const uint8_t *payload, uint8_t len);
+/* busから診断の要求・応答を読む。last_seen_msは受け取る側が持つ「最後に受け取ったフレームの送信時刻」。
+   新しいフレームで、1フレームとして正しい形（長さが1〜7でDLCに収まる）なら、payload（CAN_DIAG_SF_MAX_LEN
+   バイト以上の配列）に中身を、lenに
+   バイト数を入れてtrueを返す。新しいフレームが無い・形が正しくない場合はfalseを返す（形が正しくない
+   フレームも、受け取り済みとして記録する） */
+bool can_receive_diag_request(const CanBus *bus, uint32_t *last_seen_ms, uint8_t *payload, uint8_t *len);
+bool can_receive_diag_response(const CanBus *bus, uint32_t *last_seen_ms, uint8_t *payload, uint8_t *len);
 
 #endif /* CAN_H */

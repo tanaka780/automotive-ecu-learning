@@ -196,7 +196,7 @@ ECUソフトウェアシミュレータとして完成させるために必要�
 目的：CAN通信の途絶（Timeout）・異常データ（Invalid Data）を検出し、DTC相当の記録（`can_diag.c`）に反映できることを確認する
 
 流れ（Phase20で実装済みの範囲）：
-1. エンジンECU役がゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、200ms周期）をCAN通信でメーターECU役へ送信する
+1. エンジン監視ECU役がゲージデータ（`CAN_ID_ENGINE_STATUS`、1000ms周期）・警告灯データ（`CAN_ID_FAULT_STATUS`、200ms周期）をCAN通信でメーターECU役へ送信する
 2. `can_fault.txt`で指定した期間だけ、意図的に送信を止める（Timeout、`MODE=DROP`、Phase22）、またはEngineStatusの送信データを値域外に差し替える（Invalid Data、`MODE=CORRUPT`、Phase22拡張バックログ、EngineStatusのみ対応）
 3. メーターECU役が3回連続でTimeout/Invalid Dataを検知すると、`CanLinkState`が`CAN_LINK_LOST`に確定する
 4. 送信が再開/正常な値に戻り、メーターECU役が3回連続で正常受信すると`CAN_LINK_OK`に復帰する
