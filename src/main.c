@@ -20,6 +20,8 @@
 #include "can_fault.h"
 #include "meter.h"
 #include "fan_ecu.h"
+#include "uds.h"
+#include "uds_tester.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -31,6 +33,10 @@
 /* 警告灯データ(CAN_MSG_FAULT_STATUS)の送受信周期 [ms]。実車で異常系ほど高頻度に送る慣例に合わせ、
    ゲージデータ(SAMPLE_PERIOD_MS)より短くする（Phase20、Day43決定） */
 #define CAN_FAULT_PERIOD_MS 200U
+
+/* 診断の要求を見に行く周期 [ms]。UDSで要求から応答までの目安とされる50ms（P2）以内に返せるよう、
+   Schedulerがタスクの周期を見に行く間隔（10ms）と同じにする（Phase30） */
+#define UDS_PERIOD_MS 10U
 
 /* Schedulerに登録するサンプル周期タスク(run_sample_cycle)が参照する、main()のローカル変数への
    ポインタ一式。タスク関数はvoid *contextしか受け取れないため、必要なデータをここにまとめて渡す */
@@ -187,6 +193,17 @@ static void run_fan_send_fan_status(void *context) {
     }
 }
 
+/* エンジン監視ECU役：診断の要求への応答（uds.c）をSchedulerのタスクとして呼ぶための変換（Phase30） */
+static void run_uds_server(void *context) {
+    uds_server_run((UdsContext *)context);
+}
+
+/* スキャンツール役（sim/uds_tester.c）をSchedulerのタスクとして呼ぶための変換（Phase30）。
+   応答のタスクより後に登録するので、同じ回の中では、要求を送ってから応答が返るのは次の回（10ms後）になる */
+static void run_uds_tester(void *context) {
+    uds_tester_run((UdsTesterContext *)context);
+}
+
 /* Schedulerに登録するタスク1個分（関数・context・周期）。登録を表にしてループで回し、
    どれか1つでも登録できなければ起動しないようにするために使う（Phase30） */
 typedef struct {
@@ -274,6 +291,11 @@ int main(void) {
     can_fault_init(&can_fault_cfg);
     (void)can_fault_load(&can_fault_cfg, CAN_FAULT_FILENAME);
 
+    /* スキャンツール役（Phase30）：uds_request.txtがあれば、書いた要求を指定したサンプルの後に送る。
+       ファイルが無ければ何も送らず、何も表示しない */
+    UdsTesterScript uds_script;
+    (void)uds_tester_load(&uds_script, UDS_TESTER_FILENAME);
+
     SampleCycleContext ctx = {
         .sample_index  = 0,
         .ignition      = &ignition,
@@ -323,11 +345,24 @@ int main(void) {
         .can_fault = &can_fault_cfg,
     };
 
-    Scheduler scheduler;                /* サンプル周期タスク・CAN送受信タスクを管理する */
+    /* エンジン監視ECU役の診断の応答が使うデータ（Phase30）。記録はサンプル周期タスクと同じdtcを読み書きする */
+    UdsContext uds_ctx = {
+        .ignition        = &ignition,
+        .can_bus         = &can_bus,
+        .dtc             = &dtc,
+        .last_request_ms = 0U,
+    };
+
+    /* スキャンツール役が使うデータ（Phase30）。サンプル番号は、試験台の時間の進み方として読むだけ */
+    UdsTesterContext tester_ctx;
+    uds_tester_init(&tester_ctx, &uds_script, &ctx.sample_index, &can_bus);
+
+    Scheduler scheduler;              /* サンプル周期タスク・CAN送受信タスクを管理する */
     scheduler_init(&scheduler);
-    /* 登録は8個（サンプル1・CAN送信1・メーターECU受信2・ファン制御ECU受信2・ファン制御ECU送信1・
-       メーターECUのファン状態受信1）。Phase26で足したタスクは既存4タスクの後に登録し、既存の登録順は変えない。
-       メーターECUのファン状態受信は、同じ周期のファン状態送信の後に登録する。
+    /* 登録は10個（サンプル1・CAN送信1・メーターECU受信2・ファン制御ECU受信2・ファン制御ECU送信1・
+       メーターECUのファン状態受信1・診断の応答1・スキャンツール役1）。Phase26で足したタスクは既存4タスクの後に登録し、既存の登録順は変えない。
+       メーターECUのファン状態受信は、同じ周期のファン状態送信の後に登録する。診断の応答とスキャンツール役（Phase30）は
+       最後に登録し、それまでの8個の登録順は変えない。
        上限(SCHEDULER_MAX_TASKS)を超えて登録できなかったタスクがあると、その処理が抜けたまま動いてしまうので、
        起動しない（Phase30。それまでは戻り値を捨てていたため、上限を超えても気づけなかった）。
        表をconstにすると、cppcheckのMISRAアドオンが、contextを渡すところをconstを外すキャスト（11.8）と
@@ -341,6 +376,8 @@ int main(void) {
         { run_fan_receive_engine_status, &fan_ctx,            SAMPLE_PERIOD_MS },
         { run_fan_send_fan_status,       &fan_send_ctx,       SAMPLE_PERIOD_MS },
         { run_can_receive_fan_status,    &can_receive_ctx,    SAMPLE_PERIOD_MS },
+        { run_uds_server,                &uds_ctx,            UDS_PERIOD_MS },
+        { run_uds_tester,                &tester_ctx,         UDS_PERIOD_MS },
     };
     for (size_t i = 0U; i < (sizeof(task_entries) / sizeof(task_entries[0])); i++) {
         if (!scheduler_add_task(&scheduler, task_entries[i].func, task_entries[i].context, task_entries[i].period_ms)) {

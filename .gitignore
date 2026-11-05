@@ -21,6 +21,10 @@ test_can_diag
 test_can_fault
 test_fan_ctrl
 test_fan_ecu
+test_uds
+test_uds_tester
+uds_request.txt
+test_uds_request.txt
 dtc_data.txt
 test_dtc_data.txt
 meter_dtc.txt
