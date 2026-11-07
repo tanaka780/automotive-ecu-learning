@@ -156,10 +156,16 @@ TEST_UDS_TESTER_TARGET = test_uds_tester
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
 # なり、テストが1つも実行されないまま終わってしまう
-.PHONY: all run test clean coverage scenario
+.PHONY: all run test clean coverage scenario check_deps
 
-# デフォルトターゲット: make だけ打つとこれが実行される
-all: $(TARGET)
+# デフォルトターゲット: make だけ打つとこれが実行される。
+# 実行ファイルを作る前に、依存の向き（check_deps）も確かめる（Phase31）
+all: check_deps $(TARGET)
+
+# 依存の向き（ECUのフォルダ → common/ → mcal_*/）が守られているかを確かめる（Phase31）。
+# 中身はtools/check_deps.shに書いてある。make test は依存の向きに関係なく動くよう、ここには入れない
+check_deps:
+	@bash tools/check_deps.sh
 
 # 実行ファイルのビルドルール
 $(TARGET): $(SRCS) $(HEADERS)

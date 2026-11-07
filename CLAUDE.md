@@ -32,8 +32,7 @@ AIは実装、整理、レビューの補助として使用しますが、目的
 * docs/learning_journal.md
 * docs/AI_workflow.md
 * docs/daily_log/ 配下の最新Day
-* src/
-* include/
+* src/（ECUごとのフォルダ・`common/`・`mcal_pc/`。README.md のフォルダ構成を参照）
 * Makefile
 
 特に、daily_log の最新Dayに書かれている「次回やること」や「次回の設計方針」は、次の作業を考える出発点として扱います。
