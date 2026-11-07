@@ -2,21 +2,7 @@
 #ifndef SENSOR_H
 #define SENSOR_H
 
-#include <stdint.h>  /* uint8_t / uint16_t などの固定幅整数型 */
-
-typedef struct {
-    uint8_t  speed;        /* 車速 [km/h]: 0〜120（停車〜一般道上限相当）。値域チェックの正本はvalidate.h参照 */
-    uint16_t rpm;          /* エンジン回転数 [rpm]: 0〜6000（アイドリング〜レッドライン）。値域チェックの正本はvalidate.h参照 */
-    uint8_t  temperature;  /* 水温 [℃]: 25〜130（常温〜オーバーヒートより上）。値域チェックの正本はvalidate.h参照 */
-} VehicleSensorData;
-
-/* センサ種別。SensorStatus.levels / DtcRecord.entries の配列インデックスとしても使う */
-typedef enum {
-    SENSOR_SPEED = 0,
-    SENSOR_RPM,
-    SENSOR_TEMP,
-    SENSOR_COUNT   /* センサ種別の数（配列サイズに使う。実際のセンサ種別ではない） */
-} SensorId;
+#include "sensor_types.h"  /* VehicleSensorData・SensorId（Phase31で分けた） */
 
 /* センサ値を初期値（停車・アイドリング・常温）に設定する */
 void sensor_init(VehicleSensorData *data);

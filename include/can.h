@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "sensor.h"     /* VehicleSensorData を参照するために必要 */
+#include "sensor_types.h"  /* VehicleSensorData を参照するために必要 */
 
 /* CAN通信の実現方式（Phase20、Day43決定）：実プロセス分離は行わず、単一プロセス内で
    エンジンECU役／メーターECU役をSchedulerタスクとして表現する。CanBusは両役が共有する
@@ -24,7 +24,7 @@ typedef enum {
 #define CAN_ID_ENGINE_STATUS 0x200U
 #define CAN_ID_FAN_STATUS    0x300U
 
-/* 警告灯データ(data[0])のビット割り当て。SensorId(sensor.h)の並びに合わせる */
+/* 警告灯データ(data[0])のビット割り当て。SensorId(sensor_types.h)の並びに合わせる */
 #define CAN_FAULT_BIT_SPEED 0x01U
 #define CAN_FAULT_BIT_RPM   0x02U
 #define CAN_FAULT_BIT_TEMP  0x04U

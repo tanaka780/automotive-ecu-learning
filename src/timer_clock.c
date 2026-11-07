@@ -2,7 +2,7 @@
    ヘッダより前に定義する（200809L = POSIX.1-2008、clock_gettimeが属するバージョン） */
 #define _POSIX_C_SOURCE 200809L
 
-#include "timer.h"
+#include "timer_clock.h"
 #include <time.h>
 
 /* 実時間の時計と待機。timer.cの周期判定はここで得た時刻だけを使う。

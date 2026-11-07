@@ -1,7 +1,7 @@
 #include "validate.h"
 #include "logger.h"   /* LOG_INFO/LOG_ERROR を参照するために必要 */
 
-/* センサごとの物理的な値域。SensorId（sensor.h）を添字にすることで、
+/* センサごとの物理的な値域。SensorId（sensor_types.h）を添字にすることで、
    diag.c/status.cと同じ「enum+配列」のパターンをそのまま使い、
    センサ別のif分岐を増やさない */
 typedef struct {

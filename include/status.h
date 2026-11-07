@@ -24,7 +24,7 @@ typedef enum {
 #define STATUS_TEMP_CRIT   110   /* 水温 危険レベルの境界 [℃]（オーバーヒート） */
 
 /* センサの生の値は持たず、分類結果（SensorLevel）だけを持つ。
-   添字はSensorId（sensor.h）を使う */
+   添字はSensorId（sensor_types.h）を使う */
 typedef struct {
     SensorLevel levels[SENSOR_COUNT];
 } SensorStatus;

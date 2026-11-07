@@ -26,7 +26,7 @@ typedef enum {
     FAULT_DEGRADED
 } FaultState;
 
-/* センサ別にDebounce/Recoveryの連続回数と確定状態を持つ。添字はSensorId（sensor.h）を共有する */
+/* センサ別にDebounce/Recoveryの連続回数と確定状態を持つ。添字はSensorId（sensor_types.h）を共有する */
 typedef struct {
     uint8_t    bad_count[SENSOR_COUNT];  /* FAULT_NORMAL中の、悪い状態の連続回数（Debounce用） */
     uint8_t    good_count[SENSOR_COUNT]; /* FAULT_DEGRADED中の、良い状態の連続回数（Recovery用） */
