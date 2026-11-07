@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 /* 時計と待機（いちばん下のドライバ。Phase31でtimer.hから分けた）。
-   中身は、src/timer_clock.c（実時間）とsim/timer_clock_virtual.c（仮想時間）のどちらか一方をリンクする。
+   中身は、src/mcal_pc/timer_clock.c（実時間）とsim/timer_clock_virtual.c（仮想時間）のどちらか一方をリンクする。
    周期判定（timer.h）はこのヘッダを読む側で、ドライバのヘッダはドライバの側が持つ */
 
 /* 起動からの経過時間を取得する（単調増加クロック CLOCK_MONOTONIC を使用）。

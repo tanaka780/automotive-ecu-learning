@@ -1,6 +1,6 @@
 #include "timer_clock.h"
 
-/* 検証用の仮想時計（PC上の検証専用）。src/timer_clock.cの代わりにリンクし、sensor_sim_virtualを作る。
+/* 検証用の仮想時計（PC上の検証専用）。src/mcal_pc/timer_clock.cの代わりにリンクし、sensor_sim_virtualを作る。
    時刻はtimer_wait_msで進めた分だけ進み、実際には待たない。処理にかかった実時間は時刻に入らないため、
    タスクは常に周期ちょうどに実行され、同じ入力なら出力が毎回同じになる */
 

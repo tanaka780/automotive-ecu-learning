@@ -1,6 +1,6 @@
 #include "timer.h"
 
-/* 周期判定。時刻はtimer_get_elapsed_ms（src/timer_clock.c、検証用ビルドではsim/timer_clock_virtual.c）
+/* 周期判定。時刻はtimer_get_elapsed_ms（src/mcal_pc/timer_clock.c、検証用ビルドではsim/timer_clock_virtual.c）
    から得るだけで、時計が実時間か仮想時間かは知らない */
 
 /* period_msの周期でtimerを初期化する。基準時刻は呼び出した瞬間の経過時間 */

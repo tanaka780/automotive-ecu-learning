@@ -1,5 +1,5 @@
 /* -std=c11だけではnanosleep()が見えないため、POSIX機能テストマクロをヘッダより前に定義する
-   （src/timer.cのclock_gettimeと理由は同じ） */
+   （src/common/timer.cのclock_gettimeと理由は同じ） */
 #define _POSIX_C_SOURCE 200809L
 
 #include "unity.h"
