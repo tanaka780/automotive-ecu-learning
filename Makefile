@@ -22,10 +22,10 @@ TEST_CFLAGS_COV = $(TEST_CFLAGS) --coverage
 
 # コンパイル対象のソースファイル
 # モジュールを追加したときはここに追記する
-# ECU_SRCS: ECU本体（src/）、SIM_SRCS: PC上の検証専用（sim/、固定値注入・CAN Fault Injection、Phase25）。
+# ECU_SRCS: ECU本体（src/）、SIM_SRCS: PC上の検証専用（sim/、固定値注入・CAN Fault Injection・スキャンツール役・タスクの停止、Phase25〜）。
 # sensor_simは両方を合わせてビルドする。main.cがsim/の関数を直接呼んでいるため、現状はsim/を外すとビルドできない
 ECU_SRCS = src/main.c src/engine_ecu/sensor.c src/engine_ecu/stats.c src/engine_ecu/alert.c src/engine_ecu/status.c src/engine_ecu/diag.c src/common/logger.c src/common/ignition.c src/persist.c src/cmd.c src/engine_ecu/config.c src/common/validate.c src/engine_ecu/faultmgr.c src/common/timer.c src/mcal_pc/timer_clock.c src/common/scheduler.c src/common/debounce.c src/common/can.c src/common/dtc_status.c src/common/can_diag.c src/meter_ecu/meter.c src/fan_ecu/fan_ecu.c src/fan_ecu/fan_ctrl.c src/engine_ecu/uds.c
-SIM_SRCS = sim/fixture.c sim/can_fault.c sim/uds_tester.c
+SIM_SRCS = sim/fixture.c sim/can_fault.c sim/uds_tester.c sim/task_stall.c
 SRCS = $(ECU_SRCS) $(SIM_SRCS)
 
 # 時間を仮想化した検証用のビルド。実時間の時計と待機（src/mcal_pc/timer_clock.c）だけを、仮想時計
@@ -152,6 +152,10 @@ TEST_UDS_TARGET = test_uds
 TEST_UDS_TESTER_SRCS = test/test_uds_tester.c sim/uds_tester.c src/common/can.c src/common/debounce.c src/common/validate.c src/common/timer.c src/mcal_pc/timer_clock.c src/common/logger.c $(UNITY_DIR)/unity.c
 TEST_UDS_TESTER_TARGET = test_uds_tester
 
+# task_stall.c の動作確認用テスト（止める期間の判定・task_stall.txtの読み込み、main.c は使わない。Phase32）
+TEST_TASK_STALL_SRCS = test/test_task_stall.c sim/task_stall.c src/common/timer.c src/mcal_pc/timer_clock.c src/common/logger.c $(UNITY_DIR)/unity.c
+TEST_TASK_STALL_TARGET = test_task_stall
+
 # all/run/test/cleanは実ファイルを作らない疑似ターゲット。
 # 特にtestはリポジトリ内の実在するtest/ディレクトリと名前が衝突するため、.PHONY宣言が無いと
 # test/の更新日時がビルド済みテスト実行ファイルより新しい場合に「make: 'test' is up to date」と
@@ -239,6 +243,9 @@ $(TEST_UDS_TARGET): $(TEST_UDS_SRCS) $(HEADERS)
 $(TEST_UDS_TESTER_TARGET): $(TEST_UDS_TESTER_SRCS) $(HEADERS)
 	$(CC) $(TEST_CFLAGS) $(TEST_UDS_TESTER_SRCS) -o $(TEST_UDS_TESTER_TARGET)
 
+$(TEST_TASK_STALL_TARGET): $(TEST_TASK_STALL_SRCS) $(HEADERS)
+	$(CC) $(TEST_CFLAGS) $(TEST_TASK_STALL_SRCS) -o $(TEST_TASK_STALL_TARGET)
+
 # カバレッジ計測用のビルドルール（Phase23）。ソースは既存のTEST_X_SRCSをそのまま再利用し、
 # --coverageを付けた別の実行ファイル（xxx_cov）としてビルドする
 test_diag_cov: $(TEST_DIAG_SRCS) $(HEADERS)
@@ -304,15 +311,18 @@ test_uds_cov: $(TEST_UDS_SRCS) $(HEADERS)
 test_uds_tester_cov: $(TEST_UDS_TESTER_SRCS) $(HEADERS)
 	$(CC) $(TEST_CFLAGS_COV) $(TEST_UDS_TESTER_SRCS) -o test_uds_tester_cov
 
-# カバレッジ計測ターゲット: 21ターゲットそれぞれを実行し、担当モジュール（xxx_covに対応する1つの.c）の
+test_task_stall_cov: $(TEST_TASK_STALL_SRCS) $(HEADERS)
+	$(CC) $(TEST_CFLAGS_COV) $(TEST_TASK_STALL_SRCS) -o test_task_stall_cov
+
+# カバレッジ計測ターゲット: 22ターゲットそれぞれを実行し、担当モジュール（xxx_covに対応する1つの.c）の
 # gcov結果（実行行数の割合）を表示する。ターゲット名と担当モジュール名の対応（1ユニット=1テストスイート）
 COVERAGE_PAIRS = test_diag:diag test_persist:persist test_stats:stats test_alert:alert \
 	test_ignition:ignition test_cmd:cmd test_config:config test_fixture:fixture \
 	test_validate:validate test_faultmgr:faultmgr test_timer:timer test_scheduler:scheduler \
 	test_debounce:debounce test_can:can test_dtc_status:dtc_status test_can_diag:can_diag \
-	test_can_fault:can_fault test_fan_ctrl:fan_ctrl test_fan_ecu:fan_ecu test_uds:uds test_uds_tester:uds_tester
+	test_can_fault:can_fault test_fan_ctrl:fan_ctrl test_fan_ecu:fan_ecu test_uds:uds test_uds_tester:uds_tester test_task_stall:task_stall
 
-coverage:test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignition_cov test_cmd_cov test_config_cov test_fixture_cov test_validate_cov test_faultmgr_cov test_timer_cov test_scheduler_cov test_debounce_cov test_can_cov test_dtc_status_cov test_can_diag_cov test_can_fault_cov test_fan_ctrl_cov test_fan_ecu_cov test_uds_cov test_uds_tester_cov
+coverage:test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignition_cov test_cmd_cov test_config_cov test_fixture_cov test_validate_cov test_faultmgr_cov test_timer_cov test_scheduler_cov test_debounce_cov test_can_cov test_dtc_status_cov test_can_diag_cov test_can_fault_cov test_fan_ctrl_cov test_fan_ecu_cov test_uds_cov test_uds_tester_cov test_task_stall_cov
 	@for pair in $(COVERAGE_PAIRS); do \
 		target=$${pair%%:*}; \
 		module=$${pair##*:}; \
@@ -325,8 +335,8 @@ coverage:test_diag_cov test_persist_cov test_stats_cov test_alert_cov test_ignit
 run: $(TARGET)
 	./$(TARGET)
 
-# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_can・test_dtc_status・test_can_diag・test_can_fault・test_fan_ctrl・test_fan_ecu・test_uds・test_uds_testerをビルドして全て実行する
-test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET) $(TEST_UDS_TARGET) $(TEST_UDS_TESTER_TARGET)
+# テストターゲット: make test でtest_diag・test_persist・test_stats・test_alert・test_ignition・test_cmd・test_config・test_fixture・test_validate・test_faultmgr・test_timer・test_scheduler・test_debounce・test_can・test_dtc_status・test_can_diag・test_can_fault・test_fan_ctrl・test_fan_ecu・test_uds・test_uds_tester・test_task_stallをビルドして全て実行する
+test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET) $(TEST_UDS_TARGET) $(TEST_UDS_TESTER_TARGET) $(TEST_TASK_STALL_TARGET)
 	./$(TEST_DIAG_TARGET)
 	./$(TEST_PERSIST_TARGET)
 	./$(TEST_STATS_TARGET)
@@ -348,6 +358,7 @@ test: $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALE
 	./$(TEST_FAN_ECU_TARGET)
 	./$(TEST_UDS_TARGET)
 	./$(TEST_UDS_TESTER_TARGET)
+	./$(TEST_TASK_STALL_TARGET)
 
 # シナリオ検証ターゲット（Phase25）: sensor_simをPythonから実行し、docs/scenarios.mdの期待結果と照合する。
 # 1条件につきsensor_simを最後まで動かす（約20秒）ため、make testには含めず別ターゲットにしている。
@@ -357,5 +368,5 @@ scenario: $(TARGET) $(VIRTUAL_TARGET)
 
 # クリーンターゲット: make clean で生成ファイルを削除する
 clean:
-	rm -f $(TARGET) $(VIRTUAL_TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET) $(TEST_UDS_TARGET) $(TEST_UDS_TESTER_TARGET)
+	rm -f $(TARGET) $(VIRTUAL_TARGET) $(TEST_DIAG_TARGET) $(TEST_PERSIST_TARGET) $(TEST_STATS_TARGET) $(TEST_ALERT_TARGET) $(TEST_IGNITION_TARGET) $(TEST_CMD_TARGET) $(TEST_CONFIG_TARGET) $(TEST_FIXTURE_TARGET) $(TEST_VALIDATE_TARGET) $(TEST_FAULTMGR_TARGET) $(TEST_TIMER_TARGET) $(TEST_SCHEDULER_TARGET) $(TEST_DEBOUNCE_TARGET) $(TEST_CAN_TARGET) $(TEST_DTC_STATUS_TARGET) $(TEST_CAN_DIAG_TARGET) $(TEST_CAN_FAULT_TARGET) $(TEST_FAN_CTRL_TARGET) $(TEST_FAN_ECU_TARGET) $(TEST_UDS_TARGET) $(TEST_UDS_TESTER_TARGET) $(TEST_TASK_STALL_TARGET)
 	rm -f *_cov *.gcno *.gcda *.gcov

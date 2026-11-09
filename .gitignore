@@ -23,6 +23,7 @@ test_fan_ctrl
 test_fan_ecu
 test_uds
 test_uds_tester
+test_task_stall
 uds_request.txt
 test_uds_request.txt
 dtc_data.txt

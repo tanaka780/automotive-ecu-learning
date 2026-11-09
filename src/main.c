@@ -22,6 +22,7 @@
 #include "fan_ecu.h"
 #include "uds.h"
 #include "uds_tester.h"
+#include "task_stall.h"
 
 /* サンプルの周期 [ms]。以前はsleep(1)で固定1秒待っていたが、Timerによる経過時間ベースの
    周期判定（Phase18）を経て、周期待ち・タスク呼び出しをSchedulerに委譲した（Phase19） */
@@ -76,6 +77,13 @@ typedef struct {
     CanBus               *can_bus;
     const CanFaultConfig *can_fault;   /* 送信をラップしてファン状態を止める（Phase26） */
 } FanCanSendContext;
+
+/* ファン制御ECU役の受信タスク2個(run_fan_receive_*)が参照するポインタ一式（Phase32）。
+   FanEcuContextはfan_ecu/の型なので、試験台（sim/）のタスクの停止の設定は入れず、ここで組にする */
+typedef struct {
+    FanEcuContext   *fan;
+    TaskStallConfig *task_stall;   /* task_stall.txtで指定した期間だけ、受信のタスクを呼ばない */
+} FanReceiveContext;
 
 /* 1サンプル分の処理（旧main.cのforループ本体）。Schedulerから周期(SAMPLE_PERIOD_MS)ごとに呼ばれる。
    CAN送受信タスク（200ms周期、Phase20）が同じSchedulerに混在する現在は、1回のscheduler_run_due呼び出し
@@ -173,13 +181,22 @@ static void run_can_receive_fan_status(void *context) {
     meter_receive_fan_status((MeterContext *)context);
 }
 
-/* ファン制御ECU役（fan_ecu.c）の受信処理も、メーターECU役と同じ形で変換して呼ぶ（Phase26） */
+/* ファン制御ECU役（fan_ecu.c）の受信処理も、メーターECU役と同じ形で変換して呼ぶ（Phase26）。
+   task_stall.txtで止める期間なら、fan_ecu.cを呼ばずに戻り、タスクが止まった状態を再現する（Phase32） */
 static void run_fan_receive_fault_status(void *context) {
-    fan_ecu_receive_fault_status((FanEcuContext *)context);
+    FanReceiveContext *ctx = (FanReceiveContext *)context;
+    if (task_stall_should_skip(ctx->task_stall, TASK_STALL_FAN_RX_FAULT_STATUS)) {
+        return;
+    }
+    fan_ecu_receive_fault_status(ctx->fan);
 }
 
 static void run_fan_receive_engine_status(void *context) {
-    fan_ecu_receive_engine_status((FanEcuContext *)context);
+    FanReceiveContext *ctx = (FanReceiveContext *)context;
+    if (task_stall_should_skip(ctx->task_stall, TASK_STALL_FAN_RX_ENGINE_STATUS)) {
+        return;
+    }
+    fan_ecu_receive_engine_status(ctx->fan);
 }
 
 /* ファン制御ECU役：ファン状態(CAN_MSG_FAN_STATUS)をSAMPLE_PERIOD_MS周期で送信する（Phase26）。
@@ -291,6 +308,12 @@ int main(void) {
     can_fault_init(&can_fault_cfg);
     (void)can_fault_load(&can_fault_cfg, CAN_FAULT_FILENAME);
 
+    /* タスクの停止（Phase32）：task_stall.txtがあれば、指定したファン制御ECU役の受信のタスクを、
+       指定した期間だけ呼ばない。ファイルが無ければ止めず、何も表示しない */
+    TaskStallConfig task_stall_cfg;
+    task_stall_init(&task_stall_cfg);
+    (void)task_stall_load(&task_stall_cfg, TASK_STALL_FILENAME);
+
     /* スキャンツール役（Phase30）：uds_request.txtがあれば、書いた要求を指定したサンプルの後に送る。
        ファイルが無ければ何も送らず、何も表示しない */
     UdsTesterScript uds_script;
@@ -338,6 +361,11 @@ int main(void) {
         .can_dtc     = &fan_can_dtc,
         .state       = &fan_state,
     };
+    /* 受信タスク(ファン制御ECU役)の変換関数用。タスクの停止の設定と組にする（Phase32） */
+    FanReceiveContext fan_receive_ctx = {
+        .fan        = &fan_ctx,
+        .task_stall = &task_stall_cfg,
+    };
     /* 送信タスク(ファン制御ECU役)用（Phase26） */
     FanCanSendContext fan_send_ctx = {
         .fan       = &fan_ctx,
@@ -372,8 +400,8 @@ int main(void) {
         { run_can_send_fault_status,     &can_send_fault_ctx, CAN_FAULT_PERIOD_MS },
         { run_can_receive_fault_status,  &can_receive_ctx,    CAN_FAULT_PERIOD_MS },
         { run_can_receive_engine_status, &can_receive_ctx,    SAMPLE_PERIOD_MS },
-        { run_fan_receive_fault_status,  &fan_ctx,            CAN_FAULT_PERIOD_MS },
-        { run_fan_receive_engine_status, &fan_ctx,            SAMPLE_PERIOD_MS },
+        { run_fan_receive_fault_status,  &fan_receive_ctx,    CAN_FAULT_PERIOD_MS },
+        { run_fan_receive_engine_status, &fan_receive_ctx,    SAMPLE_PERIOD_MS },
         { run_fan_send_fan_status,       &fan_send_ctx,       SAMPLE_PERIOD_MS },
         { run_can_receive_fan_status,    &can_receive_ctx,    SAMPLE_PERIOD_MS },
         { run_uds_server,                &uds_ctx,            UDS_PERIOD_MS },
