@@ -15,6 +15,11 @@
    途絶の確定（約3000ms）より短くすると、届かないフレームを途絶より先に古さとして見つけ、理由が混ざる */
 #define FAN_TEMP_STALE_MS 4000U
 
+/* 最後に判断してから、これを超えたら判断が古いとみなし、送るときにファンの出力をONにしてONを送る [ms]（Phase32）。
+   判断（警告灯データの受信）は200ms周期で、警告灯データが途絶しても「途絶」と判断し続けるので、判断の時刻が
+   進まなくなるのは、そのタスクが呼ばれないときだけ。普段の間隔（約200ms）より十分長い5回分にする */
+#define FAN_DECISION_STALE_MS 1000U
+
 /* ファン制御ECU役の判断に使う状態（Phase26）。イグニッションOFF→ONで初期値に戻す。
    実車のECUはOFFで電源が落ち、ONの後に新しく受信するまで信号を無効として扱うのに合わせる */
 typedef struct {
@@ -25,6 +30,8 @@ typedef struct {
     uint32_t temp_received_ms; /* 最後に新しい水温を受け取った時刻（自分の時計）。まだ受け取っていなければ、
                                   イグニッションONにした時刻（Phase32） */
     bool     temp_stale;       /* 水温が古いと判断しているか（切り替わった瞬間だけログを出すため、Phase32） */
+    uint32_t decided_ms;       /* 最後に判断した時刻（自分の時計）。まだ判断していなければ、イグニッションONにした時刻（Phase32） */
+    bool     decision_stale;   /* 判断が古いと判断しているか（切り替わった瞬間だけログを出すため、Phase32） */
     bool     temp_judged;      /* その水温より後に送られた警告灯データで、使えるかを決めたか */
     bool     temp_usable;      /* 決めた結果。その警告灯データで水温センサが正常ならtrue */
     FanState temp_request;     /* 水温による要求（fan_ctrl_decideに渡す前回の要求） */
@@ -59,7 +66,8 @@ void fan_ecu_receive_fault_status(FanEcuContext *ctx, uint32_t now_ms);
 void fan_ecu_receive_engine_status(FanEcuContext *ctx, uint32_t now_ms);
 
 /* ファン状態として送る値（まとめた後のファン出力）をfan_onに返す。イグニッションOFF中はfalseを返し、
-   送らない。busへの書き込みは呼び出し側（main.c）が行う。エンジン監視ECUの送信と同じく、
+   送らない。最後に判断してからFAN_DECISION_STALE_MSを超えていたら、ファンの出力そのものをONにしてからONを返す
+   （判断のタスクが止まっていると、出力が止まる前のまま固まるため。Phase32）。busへの書き込みは呼び出し側（main.c）が行う。エンジン監視ECUの送信と同じく、
    通信故障の注入（sim/）を挟む場所をmain.cに限るため */
 bool fan_ecu_get_fan_status(FanEcuContext *ctx, uint32_t now_ms, bool *fan_on);
 

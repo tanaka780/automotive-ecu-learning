@@ -372,6 +372,64 @@ static void test_no_stale_while_engine_link_lost(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "途絶でON");
 }
 
+/* 警告灯データの受信のタスク（判断）が止まると、出力が止まる前のまま固まる。送るときに、最後に判断してから
+   上限ちょうどまではそのまま、超えたらファンの出力そのものをONにしてONを送る（Phase32） */
+static void test_stale_decision_turns_fan_on(void) {
+    bool fan_on = true;
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "前提: OFF閾値の水温でOFF");
+    clock_ms = FAN_DECISION_STALE_MS;
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_FALSE_MESSAGE(fan_on, "上限ちょうどではOFFのまま送る");
+    clock_ms = FAN_DECISION_STALE_MS + 1U;
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_TRUE_MESSAGE(state.decision_stale, "判断が古いと判断する");
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "ファンの出力そのものをONにする");
+    TEST_ASSERT_TRUE_MESSAGE(fan_on, "ONを送る");
+}
+
+/* イグニッションONの後に一度も判断していない場合は、ONにした時刻から数える（Phase32） */
+static void test_stale_decision_from_ignition_on(void) {
+    bool fan_on = true;
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));   /* clock_ms=0でONを見つける */
+    TEST_ASSERT_FALSE_MESSAGE(fan_on, "前提: ONの直後はOFF");
+    clock_ms = FAN_DECISION_STALE_MS + 1U;
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_TRUE_MESSAGE(fan_on, "ONにしてから一度も判断せずに上限を超えたらON");
+}
+
+/* 警告灯データが途絶しても、受信のタスクは呼ばれて判断を続けるので、判断は古くならない（Phase32） */
+static void test_no_stale_decision_while_fault_status_lost(void) {
+    bool fan_on = false;
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    for (int i = 0; i < 10; i++) {
+        clock_ms += 200U;
+        fan_ecu_receive_fault_status(&ctx, clock_ms);   /* 新しいフレームが届かない */
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_LOST, monitor.state[CAN_MSG_FAULT_STATUS], "前提: 途絶");
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_FALSE_MESSAGE(state.decision_stale, "判断は続いているので古くない");
+    TEST_ASSERT_TRUE_MESSAGE(fan_on, "途絶でONを送る");
+}
+
+/* 判断のタスクが動き出したら、古さは解け、いつもの判断で出力を決め直す（Phase32） */
+static void test_decision_resumes_after_stale(void) {
+    bool fan_on = false;
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    clock_ms = FAN_DECISION_STALE_MS + 1U;
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: 判断が古くてON");
+    clock_ms += 200U;
+    receive_fault(0U);
+    TEST_ASSERT_FALSE_MESSAGE(state.decision_stale, "判断が動き出したら古さは解ける");
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "いつもの判断（OFF閾値の水温）でOFFに戻る");
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
+    TEST_ASSERT_FALSE_MESSAGE(fan_on, "OFFを送る");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -397,6 +455,10 @@ int main(void) {
     RUN_TEST(test_stale_from_ignition_on_without_temp);
     RUN_TEST(test_hold_on_after_stale_until_usable_temp);
     RUN_TEST(test_no_stale_while_engine_link_lost);
+    RUN_TEST(test_stale_decision_turns_fan_on);
+    RUN_TEST(test_stale_decision_from_ignition_on);
+    RUN_TEST(test_no_stale_decision_while_fault_status_lost);
+    RUN_TEST(test_decision_resumes_after_stale);
 
     return UNITY_END();
 }

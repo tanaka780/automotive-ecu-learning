@@ -15,6 +15,8 @@ void fan_ecu_init(FanEcuState *state) {
     state->temp_sent_ms   = 0U;
     state->temp_received_ms = 0U;
     state->temp_stale       = false;
+    state->decided_ms       = 0U;
+    state->decision_stale   = false;
     state->temp_judged    = false;
     state->temp_usable    = false;
     state->temp_request   = FAN_OFF;
@@ -39,8 +41,24 @@ static bool fan_ecu_is_powered(FanEcuContext *ctx, uint32_t now_ms) {
         can_monitor_restart(ctx->can_monitor);
         ctx->state->powered = true;
         ctx->state->temp_received_ms = now_ms;
+        ctx->state->decided_ms       = now_ms;   /* まだ判断していない間は、ONにした時刻から数える */
     }
     return true;
+}
+
+/* ファン出力をnextにし、変わった瞬間だけログを出す。reasonはONにする理由（OFFのときは使わない）。
+   判断（fan_ecu_decide）と、判断が古いときの送信（fan_ecu_get_fan_status）の両方から呼ぶ（Phase32） */
+static void fan_ecu_set_output(FanEcuState *st, FanState next, const char *reason) {
+    if (next != st->output) {
+        char line[40];   /* "Fan ON (temp sensor fault)" が収まるサイズ */
+        if (next == FAN_ON) {
+            (void)snprintf(line, sizeof(line), "Fan ON (%s)", reason);
+        } else {
+            (void)snprintf(line, sizeof(line), "Fan OFF");
+        }
+        log_print_leveled(LOG_INFO, "FAN", line);
+        st->output = next;
+    }
 }
 
 /* 送信時刻aがbより後ならtrueを返す。uint32_tの引き算は桁あふれをまたいでも経過時間になるため、
@@ -117,17 +135,7 @@ static void fan_ecu_decide(FanEcuContext *ctx, CanLinkState fault_link, const Ca
         }
     }
 
-    FanState next = (reason != NULL) ? FAN_ON : FAN_OFF;
-    if (next != st->output) {
-        char line[40];   /* "Fan ON (temp sensor fault)" が収まるサイズ */
-        if (next == FAN_ON) {
-            (void)snprintf(line, sizeof(line), "Fan ON (%s)", reason);
-        } else {
-            (void)snprintf(line, sizeof(line), "Fan OFF");
-        }
-        log_print_leveled(LOG_INFO, "FAN", line);
-        st->output = next;
-    }
+    fan_ecu_set_output(st, (reason != NULL) ? FAN_ON : FAN_OFF, reason);
 }
 
 void fan_ecu_receive_fault_status(FanEcuContext *ctx, uint32_t now_ms) {
@@ -144,7 +152,13 @@ void fan_ecu_receive_fault_status(FanEcuContext *ctx, uint32_t now_ms) {
     can_diag_check(ctx->can_dtc, CAN_MSG_FAULT_STATUS, previous, state);
     fan_ecu_judge_temp(ctx, &status);
     fan_ecu_check_temp_age(ctx, now_ms);
+    /* 判断のタスクが動き出したら、判断の古さは解ける。出力はこの後の判断でいつもどおり決め直す（Phase32） */
+    if (ctx->state->decision_stale) {
+        log_print_leveled(LOG_INFO, "FAN", "Decision resumed");
+        ctx->state->decision_stale = false;
+    }
     fan_ecu_decide(ctx, state, &status);
+    ctx->state->decided_ms = now_ms;
 }
 
 void fan_ecu_receive_engine_status(FanEcuContext *ctx, uint32_t now_ms) {
@@ -173,11 +187,22 @@ void fan_ecu_receive_engine_status(FanEcuContext *ctx, uint32_t now_ms) {
 }
 
 /* 受信と同じくfan_ecu_is_powered()を通す。OFF→ONの直後に受信より先に呼ばれても、
-   OFF前の出力ではなく、戻した後の出力（OFF）を送るため */
+   OFF前の出力ではなく、戻した後の出力（OFF）を送るため。
+   最後に判断してからFAN_DECISION_STALE_MSを超えていたら、判断のタスク（警告灯データの受信）が止まっているので、
+   送る値だけでなくファンの出力そのものをONにする（Phase32）。送る値だけをONにすると、本当のファンはOFFのまま
+   メーターにONと報告することになるため。古くなった瞬間だけログを出す（記録（DTC）は付けない） */
 bool fan_ecu_get_fan_status(FanEcuContext *ctx, uint32_t now_ms, bool *fan_on) {
     if (!fan_ecu_is_powered(ctx, now_ms)) {
         return false;
     }
-    *fan_on = (ctx->state->output == FAN_ON);
+    FanEcuState *st = ctx->state;
+    if ((uint32_t)(now_ms - st->decided_ms) > FAN_DECISION_STALE_MS) {
+        if (!st->decision_stale) {
+            log_print_leveled(LOG_ERROR, "FAN", "No decision for too long");
+            st->decision_stale = true;
+        }
+        fan_ecu_set_output(st, FAN_ON, "decision stale");
+    }
+    *fan_on = (st->output == FAN_ON);
     return true;
 }
