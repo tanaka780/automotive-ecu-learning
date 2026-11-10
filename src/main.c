@@ -15,6 +15,7 @@
 #include "fixture.h"
 #include "faultmgr.h"
 #include "scheduler.h"
+#include "timer.h"       /* timer_get_elapsed_ms（ファン制御ECU役に今の時刻を渡す、Phase32） */
 #include "can.h"
 #include "can_diag.h"
 #include "can_fault.h"
@@ -182,13 +183,14 @@ static void run_can_receive_fan_status(void *context) {
 }
 
 /* ファン制御ECU役（fan_ecu.c）の受信処理も、メーターECU役と同じ形で変換して呼ぶ（Phase26）。
-   task_stall.txtで止める期間なら、fan_ecu.cを呼ばずに戻り、タスクが止まった状態を再現する（Phase32） */
+   task_stall.txtで止める期間なら、fan_ecu.cを呼ばずに戻り、タスクが止まった状態を再現する（Phase32）。
+   fan_ecu.cは時計を読まないので、今の時刻はここで渡す（Phase32） */
 static void run_fan_receive_fault_status(void *context) {
     FanReceiveContext *ctx = (FanReceiveContext *)context;
     if (task_stall_should_skip(ctx->task_stall, TASK_STALL_FAN_RX_FAULT_STATUS)) {
         return;
     }
-    fan_ecu_receive_fault_status(ctx->fan);
+    fan_ecu_receive_fault_status(ctx->fan, timer_get_elapsed_ms());
 }
 
 static void run_fan_receive_engine_status(void *context) {
@@ -196,7 +198,7 @@ static void run_fan_receive_engine_status(void *context) {
     if (task_stall_should_skip(ctx->task_stall, TASK_STALL_FAN_RX_ENGINE_STATUS)) {
         return;
     }
-    fan_ecu_receive_engine_status(ctx->fan);
+    fan_ecu_receive_engine_status(ctx->fan, timer_get_elapsed_ms());
 }
 
 /* ファン制御ECU役：ファン状態(CAN_MSG_FAN_STATUS)をSAMPLE_PERIOD_MS周期で送信する（Phase26）。
@@ -205,7 +207,7 @@ static void run_fan_receive_engine_status(void *context) {
 static void run_fan_send_fan_status(void *context) {
     FanCanSendContext *ctx = (FanCanSendContext *)context;
     bool fan_on = false;
-    if (fan_ecu_get_fan_status(ctx->fan, &fan_on)) {
+    if (fan_ecu_get_fan_status(ctx->fan, timer_get_elapsed_ms(), &fan_on)) {
         can_fault_send_fan_status(ctx->can_fault, ctx->can_bus, fan_on);
     }
 }

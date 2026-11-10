@@ -12,6 +12,8 @@ static CanDtcRecord  dtc;
 static FanEcuState   state;
 static FanEcuContext ctx;
 static uint32_t      now_ms;   /* 次に書くフレームの送信時刻。0は受信側の初期値と同じなので1から始める */
+static uint32_t      clock_ms; /* ファン制御ECUの時計（受信・判断・送信の関数に渡す今の時刻、Phase32）。
+                                  フレームの送信時刻とは別に進める */
 
 void setUp(void) {
     ignition.current  = IGNITION_ON;
@@ -26,6 +28,7 @@ void setUp(void) {
     ctx.can_dtc     = &dtc;
     ctx.state       = &state;
     now_ms = 1U;
+    clock_ms = 0U;
 }
 
 void tearDown(void) {}
@@ -41,7 +44,7 @@ static void receive_engine(uint8_t temp) {
     f->data[3] = temp;
     f->timestamp_ms = now_ms++;
     f->valid   = true;
-    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
 }
 
 /* 警告灯データ（bitsはCAN_FAULT_BIT_*の組み合わせ）を新しいフレームとして書き、受信させる。
@@ -53,7 +56,7 @@ static void receive_fault(uint8_t bits) {
     f->data[0] = bits;
     f->timestamp_ms = now_ms++;
     f->valid   = true;
-    fan_ecu_receive_fault_status(&ctx);
+    fan_ecu_receive_fault_status(&ctx, clock_ms);
 }
 
 /* 水温を一度も受け取っていない間は、ON閾値を超える値が来る前でもOFFのまま（判断しない） */
@@ -138,10 +141,10 @@ static void test_fault_status_lost_forces_on(void) {
     receive_engine(FAN_OFF_TEMP);
     receive_fault(0U);
     TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "途絶の前はOFF");
-    fan_ecu_receive_fault_status(&ctx);   /* 新しいフレームを書かずに受信させる（未受信1回目） */
-    fan_ecu_receive_fault_status(&ctx);
+    fan_ecu_receive_fault_status(&ctx, clock_ms);   /* 新しいフレームを書かずに受信させる（未受信1回目） */
+    fan_ecu_receive_fault_status(&ctx, clock_ms);
     TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "未受信2回ではまだOFF");
-    fan_ecu_receive_fault_status(&ctx);
+    fan_ecu_receive_fault_status(&ctx, clock_ms);
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "未受信3回で途絶が確定しON");
     receive_fault(0U);
     receive_fault(0U);
@@ -154,9 +157,9 @@ static void test_fault_status_lost_forces_on(void) {
 static void test_engine_status_lost_forces_on(void) {
     receive_engine(FAN_OFF_TEMP);
     receive_fault(0U);
-    fan_ecu_receive_engine_status(&ctx);
-    fan_ecu_receive_engine_status(&ctx);
-    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
     receive_fault(0U);
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "ゲージデータの途絶でON");
 }
@@ -169,11 +172,11 @@ static void test_ignition_cycle_discards_old_temp(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "OFF前はON");
 
     ignition.current = IGNITION_OFF;
-    fan_ecu_receive_fault_status(&ctx);
-    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_fault_status(&ctx, clock_ms);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
     ignition.current = IGNITION_ON;
 
-    fan_ecu_receive_engine_status(&ctx);   /* busにはOFF前のゲージデータが残っている */
+    fan_ecu_receive_engine_status(&ctx, clock_ms);   /* busにはOFF前のゲージデータが残っている */
     receive_fault(0U);
     TEST_ASSERT_FALSE_MESSAGE(state.has_valid_temp, "OFF前の水温は使わない");
     TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "ON直後は水温が届くまでOFF");
@@ -187,20 +190,20 @@ static void test_ignition_cycle_discards_old_temp(void) {
    かけ直した後に3回続けて受け取れなかったときに途絶とし、記録する（Phase28の完了後） */
 static void test_ignition_cycle_restarts_link_count(void) {
     receive_engine(FAN_ON_TEMP);
-    fan_ecu_receive_engine_status(&ctx);   /* 新しいゲージデータが届かない（1回目） */
-    fan_ecu_receive_engine_status(&ctx);   /* 2回目。あと1回で途絶 */
+    fan_ecu_receive_engine_status(&ctx, clock_ms);   /* 新しいゲージデータが届かない（1回目） */
+    fan_ecu_receive_engine_status(&ctx, clock_ms);   /* 2回目。あと1回で途絶 */
     TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_ENGINE_STATUS], "前提: 2回ではまだ途絶でない");
 
     ignition.current = IGNITION_OFF;
-    fan_ecu_receive_fault_status(&ctx);
+    fan_ecu_receive_fault_status(&ctx, clock_ms);
     ignition.current = IGNITION_ON;
 
-    fan_ecu_receive_engine_status(&ctx);
-    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
     TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_ENGINE_STATUS], "かけ直し後の2回目まではOK（切る前の2回を足さない）");
     TEST_ASSERT_EQUAL_MESSAGE(0, dtc.count[CAN_MSG_ENGINE_STATUS], "まだ記録しない");
 
-    fan_ecu_receive_engine_status(&ctx);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
     TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_LOST, monitor.state[CAN_MSG_ENGINE_STATUS], "かけ直し後の3回目で途絶");
     TEST_ASSERT_EQUAL_MESSAGE(1, dtc.count[CAN_MSG_ENGINE_STATUS], "途絶を1回記録する");
 }
@@ -209,8 +212,8 @@ static void test_ignition_cycle_restarts_link_count(void) {
 static void test_nothing_while_ignition_off(void) {
     ignition.current = IGNITION_OFF;
     for (int i = 0; i < 5; i++) {
-        fan_ecu_receive_fault_status(&ctx);
-        fan_ecu_receive_engine_status(&ctx);
+        fan_ecu_receive_fault_status(&ctx, clock_ms);
+        fan_ecu_receive_engine_status(&ctx, clock_ms);
     }
     TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_FAULT_STATUS], "OFF中は途絶を数えない");
     TEST_ASSERT_EQUAL_MESSAGE(0, dtc.count[CAN_MSG_FAULT_STATUS], "OFF中は記録しない");
@@ -220,19 +223,19 @@ static void test_nothing_while_ignition_off(void) {
 /* 送る値はまとめた後のファン出力で、can_send_fan_statusでbusに書くとbit0に入る */
 static void test_send_value_follows_output(void) {
     bool fan_on = true;
-    TEST_ASSERT_TRUE_MESSAGE(fan_ecu_get_fan_status(&ctx, &fan_on), "ON中は送る");
+    TEST_ASSERT_TRUE_MESSAGE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on), "ON中は送る");
     TEST_ASSERT_FALSE_MESSAGE(fan_on, "判断の前はOFFを送る");
 
     receive_engine(FAN_ON_TEMP);
     receive_fault(0U);
-    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, &fan_on));
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
     TEST_ASSERT_TRUE_MESSAGE(fan_on, "ファン出力ONならONを送る");
     can_send_fan_status(&bus, fan_on);
     TEST_ASSERT_EQUAL_HEX8_MESSAGE(CAN_FAN_BIT_ON, bus.frames[CAN_MSG_FAN_STATUS].data[0], "bit0にONが入る");
 
     receive_engine(FAN_OFF_TEMP);
     receive_fault(0U);
-    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, &fan_on));
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
     TEST_ASSERT_FALSE_MESSAGE(fan_on, "ファン出力OFFならOFFを送る");
     can_send_fan_status(&bus, fan_on);
     TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x00U, bus.frames[CAN_MSG_FAN_STATUS].data[0], "OFFならbit0は立たない");
@@ -243,7 +246,7 @@ static void test_send_value_during_forced_on(void) {
     bool fan_on = false;
     receive_engine(25U);
     receive_fault(CAN_FAULT_BIT_TEMP);
-    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, &fan_on));
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
     TEST_ASSERT_TRUE_MESSAGE(fan_on, "確定異常による強制ONでもONを送る");
 }
 
@@ -255,11 +258,11 @@ static void test_send_after_ignition_cycle(void) {
     TEST_ASSERT_EQUAL(FAN_ON, state.output);
 
     ignition.current = IGNITION_OFF;
-    TEST_ASSERT_FALSE_MESSAGE(fan_ecu_get_fan_status(&ctx, &fan_on), "OFF中は送らない");
+    TEST_ASSERT_FALSE_MESSAGE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on), "OFF中は送らない");
 
     ignition.current = IGNITION_ON;
     fan_on = true;
-    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, &fan_on));
+    TEST_ASSERT_TRUE(fan_ecu_get_fan_status(&ctx, clock_ms, &fan_on));
     TEST_ASSERT_FALSE_MESSAGE(fan_on, "ON直後は受信より先でもOFFを送る");
 }
 
@@ -282,7 +285,7 @@ static void test_no_off_at_fault_confirmation(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: 95℃でON");
     write_fault(0U);                      /* 確定の前に送られた警告灯データ */
     receive_engine(25U);                  /* 確定の後に送られた、差し替え後の水温 */
-    fan_ecu_receive_fault_status(&ctx);   /* 確定の前の警告灯データで判断する */
+    fan_ecu_receive_fault_status(&ctx, clock_ms);   /* 確定の前の警告灯データで判断する */
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "確定前の通知と差し替え後の水温の組み合わせでOFFにしない");
     receive_fault(CAN_FAULT_BIT_TEMP);
     TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "確定の通知を受けてもONのまま");
@@ -314,6 +317,61 @@ static void test_judge_across_timestamp_wrap(void) {
     TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "一周した後の警告灯データでも、OFF閾値の水温を使えると決める");
 }
 
+/* ゲージデータの受信のタスクが止まると、新しい水温が届かない。最後に受け取ってから上限ちょうどまではOFFのまま、
+   超えたらONにする（Phase32）。受信のタスクを呼ばないので、途絶とは判断されない */
+static void test_stale_temp_forces_on(void) {
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "前提: OFF閾値の水温でOFF");
+    clock_ms = FAN_TEMP_STALE_MS;
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "上限ちょうどではまだOFF");
+    clock_ms = FAN_TEMP_STALE_MS + 1U;
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_OK, monitor.state[CAN_MSG_ENGINE_STATUS], "前提: 途絶ではない");
+    TEST_ASSERT_TRUE_MESSAGE(state.temp_stale, "水温が古いと判断する");
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "上限を超えたらON");
+}
+
+/* イグニッションONの後に一度も水温が届かない場合は、ONにした時刻から数える（Phase32） */
+static void test_stale_from_ignition_on_without_temp(void) {
+    receive_fault(0U);   /* clock_ms=0でONを見つける */
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "前提: 水温を受け取る前はOFF");
+    clock_ms = FAN_TEMP_STALE_MS + 1U;
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "ONにしてから上限を超えたらON");
+}
+
+/* 古さで強制ONにした後、新しい水温が届いても、使えるかを決めるまではONを保つ。決まったら水温で判断する（Phase32） */
+static void test_hold_on_after_stale_until_usable_temp(void) {
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    clock_ms = FAN_TEMP_STALE_MS + 1U;
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "前提: 古さでON");
+    clock_ms += 1000U;
+    receive_engine(FAN_OFF_TEMP);           /* 受信のタスクが動き出し、新しい水温が届く */
+    fan_ecu_receive_fault_status(&ctx, clock_ms);   /* 水温より後の警告灯データはまだ届いていない */
+    TEST_ASSERT_FALSE_MESSAGE(state.temp_stale, "新しい水温が届いたら古さは解ける");
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "使える水温が決まるまではONを保つ");
+    receive_fault(0U);
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_OFF, state.output, "使える水温(OFF閾値)が決まったらOFF");
+}
+
+/* ゲージデータが途絶している間は、古さを見ない。理由は途絶のまま（Phase32。途絶させた実行のログを変えないため） */
+static void test_no_stale_while_engine_link_lost(void) {
+    receive_engine(FAN_OFF_TEMP);
+    receive_fault(0U);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);   /* 新しいゲージデータが届かない（3回で途絶） */
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
+    fan_ecu_receive_engine_status(&ctx, clock_ms);
+    TEST_ASSERT_EQUAL_MESSAGE(CAN_LINK_LOST, monitor.state[CAN_MSG_ENGINE_STATUS], "前提: 途絶");
+    clock_ms = FAN_TEMP_STALE_MS + 1U;
+    receive_fault(0U);
+    TEST_ASSERT_FALSE_MESSAGE(state.temp_stale, "途絶の間は古いと判断しない");
+    TEST_ASSERT_EQUAL_MESSAGE(FAN_ON, state.output, "途絶でON");
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -335,6 +393,10 @@ int main(void) {
     RUN_TEST(test_no_off_at_fault_confirmation);
     RUN_TEST(test_no_off_at_fault_recovery);
     RUN_TEST(test_judge_across_timestamp_wrap);
+    RUN_TEST(test_stale_temp_forces_on);
+    RUN_TEST(test_stale_from_ignition_on_without_temp);
+    RUN_TEST(test_hold_on_after_stale_until_usable_temp);
+    RUN_TEST(test_no_stale_while_engine_link_lost);
 
     return UNITY_END();
 }

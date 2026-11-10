@@ -9,6 +9,12 @@
 #include "can_diag.h"   /* CanDtcRecord を参照するために必要 */
 #include "fan_ctrl.h"   /* FanState を参照するために必要 */
 
+/* 最後に新しい水温を受け取ってから、これを超えたら水温が古いとみなしてファンをONにする [ms]（Phase32）。
+   ゲージデータは1000ms周期で、3回続けて届かないと途絶になる。途絶していない間は、新しい水温どうしの間が
+   約3000msを超えないので、4000msを超えたら、ゲージデータの受信のタスクが呼ばれていないと分かる。
+   途絶の確定（約3000ms）より短くすると、届かないフレームを途絶より先に古さとして見つけ、理由が混ざる */
+#define FAN_TEMP_STALE_MS 4000U
+
 /* ファン制御ECU役の判断に使う状態（Phase26）。イグニッションOFF→ONで初期値に戻す。
    実車のECUはOFFで電源が落ち、ONの後に新しく受信するまで信号を無効として扱うのに合わせる */
 typedef struct {
@@ -16,6 +22,9 @@ typedef struct {
     bool     has_valid_temp;   /* ONの後に、新しく届いた水温を受け取ったか */
     uint8_t  temp;             /* 最後に受け取った水温 [℃] */
     uint32_t temp_sent_ms;     /* その水温の送信時刻 */
+    uint32_t temp_received_ms; /* 最後に新しい水温を受け取った時刻（自分の時計）。まだ受け取っていなければ、
+                                  イグニッションONにした時刻（Phase32） */
+    bool     temp_stale;       /* 水温が古いと判断しているか（切り替わった瞬間だけログを出すため、Phase32） */
     bool     temp_judged;      /* その水温より後に送られた警告灯データで、使えるかを決めたか */
     bool     temp_usable;      /* 決めた結果。その警告灯データで水温センサが正常ならtrue */
     FanState temp_request;     /* 水温による要求（fan_ctrl_decideに渡す前回の要求） */
@@ -38,17 +47,20 @@ typedef struct {
 /* 判断の状態を初期値（水温未受信・要求OFF・出力OFF）にする */
 void fan_ecu_init(FanEcuState *state);
 
+/* 3つの関数のnow_msは、呼ばれた時刻（ファン制御ECU自身の時計）。このファイルは時計を読まず、
+   呼び出し側（main.c）が渡す（Phase32）。フレームの送信時刻とは別のもの */
+
 /* 警告灯データを受信し、Timeoutの検知・CanDtcRecordへの記録を行ったうえで、ファン出力を決める。
    イグニッションOFF中は何もしない */
-void fan_ecu_receive_fault_status(FanEcuContext *ctx);
+void fan_ecu_receive_fault_status(FanEcuContext *ctx, uint32_t now_ms);
 
 /* ゲージデータを受信し、Timeout/Invalid Dataの検知・CanDtcRecordへの記録を行い、新しく届いた水温を保持する。
    ファン出力は決めない（警告灯データを受けたときに決める）。イグニッションOFF中は何もしない */
-void fan_ecu_receive_engine_status(FanEcuContext *ctx);
+void fan_ecu_receive_engine_status(FanEcuContext *ctx, uint32_t now_ms);
 
 /* ファン状態として送る値（まとめた後のファン出力）をfan_onに返す。イグニッションOFF中はfalseを返し、
    送らない。busへの書き込みは呼び出し側（main.c）が行う。エンジン監視ECUの送信と同じく、
    通信故障の注入（sim/）を挟む場所をmain.cに限るため */
-bool fan_ecu_get_fan_status(FanEcuContext *ctx, bool *fan_on);
+bool fan_ecu_get_fan_status(FanEcuContext *ctx, uint32_t now_ms, bool *fan_on);
 
 #endif /* FAN_ECU_H */

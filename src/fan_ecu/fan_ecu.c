@@ -13,6 +13,8 @@ void fan_ecu_init(FanEcuState *state) {
     state->has_valid_temp = false;
     state->temp           = 0U;
     state->temp_sent_ms   = 0U;
+    state->temp_received_ms = 0U;
+    state->temp_stale       = false;
     state->temp_judged    = false;
     state->temp_usable    = false;
     state->temp_request   = FAN_OFF;
@@ -25,8 +27,9 @@ void fan_ecu_init(FanEcuState *state) {
    送信時刻の記録も戻さない。busはOFFの間も最後のフレームを持ち続けるので、
    送信時刻の記録を戻すと、OFF前の古いフレームを新しいものと見誤るため。
    OFFの間に一度は呼ばれることが前提（イグニッションはサンプル周期(1000ms)でしか変わらず、
-   警告灯データの受信は200ms周期で呼ばれるので、今の構成では見逃さない） */
-static bool fan_ecu_is_powered(FanEcuContext *ctx) {
+   警告灯データの受信は200ms周期で呼ばれるので、今の構成では見逃さない）。
+   ONにした時刻を、まだ水温を受け取っていない間の「最後に受け取った時刻」として覚える（Phase32） */
+static bool fan_ecu_is_powered(FanEcuContext *ctx, uint32_t now_ms) {
     if (ctx->ignition->current != IGNITION_ON) {
         ctx->state->powered = false;
         return false;
@@ -35,6 +38,7 @@ static bool fan_ecu_is_powered(FanEcuContext *ctx) {
         fan_ecu_init(ctx->state);
         can_monitor_restart(ctx->can_monitor);
         ctx->state->powered = true;
+        ctx->state->temp_received_ms = now_ms;
     }
     return true;
 }
@@ -60,6 +64,23 @@ static void fan_ecu_judge_temp(FanEcuContext *ctx, const CanFaultStatus *fault) 
     }
 }
 
+/* 最後に新しい水温を受け取ってからFAN_TEMP_STALE_MSを超えたら、水温が古いと判断する（Phase32）。
+   途絶の数え上げはゲージデータの受信のタスクの中にあるので、そのタスクが止まると途絶とは判断されない。
+   そこで判断する側（警告灯データの受信）が、自分の時計で古さを確かめる。
+   ゲージデータが途絶している間は見ない。途絶として扱われているうえ、見るとログが途絶させた実行にも出てしまう。
+   値域外のフレームでも受け取った時刻は進むが、それは受信のタスクが動いている間だけなので、止まったことは隠さない。
+   判断の状態が変わった瞬間だけログを出す。ファンが既にONでも、止まったことの跡を残すため（記録（DTC）は付けない） */
+static void fan_ecu_check_temp_age(FanEcuContext *ctx, uint32_t now_ms) {
+    FanEcuState *st = ctx->state;
+    bool link_ok = (ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS] == CAN_LINK_OK);
+    bool stale   = link_ok && ((uint32_t)(now_ms - st->temp_received_ms) > FAN_TEMP_STALE_MS);
+    if (stale != st->temp_stale) {
+        log_print_leveled(stale ? LOG_ERROR : LOG_INFO, "FAN",
+                          stale ? "No new temp for too long" : "New temp received again");
+        st->temp_stale = stale;
+    }
+}
+
 /* 理由ごとの要求をまとめてファン出力を決め、変わった瞬間だけログを出す。
    受信途絶・水温センサの確定異常の間は、受け取った水温が使えない（古い、またはフェイルセーフ値に
    差し替わっている）ため強制ONにし、水温による要求は更新せずに保つ。強制ONの影響を、解除後の
@@ -77,6 +98,9 @@ static void fan_ecu_decide(FanEcuContext *ctx, CanLinkState fault_link, const Ca
         st->hold_on = true;
     } else if (fault->fault_temp) {
         reason = "temp sensor fault";
+        st->hold_on = true;
+    } else if (st->temp_stale) {
+        reason = "temp stale";   /* ゲージデータの受信のタスクが止まっている（Phase32） */
         st->hold_on = true;
     } else {
         /* 使えると決まった水温でだけ要求を更新する。まだ決まっていない・使えない水温なら、前の要求を保つ */
@@ -106,8 +130,8 @@ static void fan_ecu_decide(FanEcuContext *ctx, CanLinkState fault_link, const Ca
     }
 }
 
-void fan_ecu_receive_fault_status(FanEcuContext *ctx) {
-    if (!fan_ecu_is_powered(ctx)) {
+void fan_ecu_receive_fault_status(FanEcuContext *ctx, uint32_t now_ms) {
+    if (!fan_ecu_is_powered(ctx, now_ms)) {
         return;
     }
     CanLinkState previous = ctx->can_monitor->state[CAN_MSG_FAULT_STATUS];
@@ -119,11 +143,12 @@ void fan_ecu_receive_fault_status(FanEcuContext *ctx) {
     }
     can_diag_check(ctx->can_dtc, CAN_MSG_FAULT_STATUS, previous, state);
     fan_ecu_judge_temp(ctx, &status);
+    fan_ecu_check_temp_age(ctx, now_ms);
     fan_ecu_decide(ctx, state, &status);
 }
 
-void fan_ecu_receive_engine_status(FanEcuContext *ctx) {
-    if (!fan_ecu_is_powered(ctx)) {
+void fan_ecu_receive_engine_status(FanEcuContext *ctx, uint32_t now_ms) {
+    if (!fan_ecu_is_powered(ctx, now_ms)) {
         return;
     }
     CanLinkState previous = ctx->can_monitor->state[CAN_MSG_ENGINE_STATUS];
@@ -143,13 +168,14 @@ void fan_ecu_receive_engine_status(FanEcuContext *ctx) {
         ctx->state->has_valid_temp = true;
         ctx->state->temp_sent_ms   = ctx->can_monitor->last_seen_timestamp_ms[CAN_MSG_ENGINE_STATUS];
         ctx->state->temp_judged    = false;
+        ctx->state->temp_received_ms = now_ms;   /* 古さは送信時刻ではなく、受け取った時刻で測る（Phase32） */
     }
 }
 
 /* 受信と同じくfan_ecu_is_powered()を通す。OFF→ONの直後に受信より先に呼ばれても、
    OFF前の出力ではなく、戻した後の出力（OFF）を送るため */
-bool fan_ecu_get_fan_status(FanEcuContext *ctx, bool *fan_on) {
-    if (!fan_ecu_is_powered(ctx)) {
+bool fan_ecu_get_fan_status(FanEcuContext *ctx, uint32_t now_ms, bool *fan_on) {
+    if (!fan_ecu_is_powered(ctx, now_ms)) {
         return false;
     }
     *fan_on = (ctx->state->output == FAN_ON);
