@@ -133,6 +133,18 @@ SCENARIOS = [
      "files": {"fixture.txt": fixture(temp=97), "can_fault.txt": can_fault("DROP", "FAN_STATUS")},
      "expect": [("sec", 9, "メーター：ファンの状態の連絡を受け取れなくなった"), ("sec", 14, "メーター：ファンの状態の連絡を受け取れるようになった"),
                 ("end", None, "メーター：ファンの状態の連絡を受け取れなかったこと 1回")]},
+    # ファン係の処理の停止（Phase32）。止める仕組み（sim/task_stall.c）は試験台のもので、車では処理が止まる故障に当たる
+    {"id": "fan_stall", "group": "other", "title": "ファン係の処理が止まる",
+     "situation": "ファン係のコンピュータの中で、ファンを回すかを決める処理だけが止まってしまう。その間にエンジンが熱くなる。ファンの状態の連絡は送られ続けるので、メーターからは異常に見えない。",
+     "anomaly": "ファンを回すかを決める処理（警告灯の連絡を受け取って判断する処理）が、約10秒間動かない。",
+     "response": "ファン係の中で、最後に判断してからの時間を見張り、1秒を超えたら処理が止まっていると判断して、安全のためファンを回す（温度を受け取る処理が止まったときも、新しい温度が4秒届かなければ同じく回す）。処理が動き出したら、いつもの判断に戻る。",
+     "condition": "温度を70℃→6秒目100℃→16秒目80℃に変える。2〜12秒の間、ファンを回すかを決める処理を止める。",
+     "files": {"fixture.txt": fixture(extra="TEMP@6=100\nTEMP@16=80\n"),
+               "task_stall.txt": "TARGET=FAN_RX_FAULT_STATUS\nSTART_MS=2000\nEND_MS=12000\n"},
+     "expect": [("sec", 3, "ファンを回すかを決める処理が止まった"),
+                ("sec", 4, "処理が止まっている → 安全のためファンを回し始めた"),
+                ("sec", 13, "ファンを回すかを決める処理が動き出した"), ("not", 13, "ファンを止めた"),
+                ("sec", 16, "ファンを止めた")]},
     {"id": "config", "group": "other", "title": "設定ファイルの異常",
      "situation": "整備での書き込みに失敗して、設定データが無くなっている。",
      "anomaly": "起動時に設定ファイルを読めない。",
@@ -221,6 +233,16 @@ SENSOR_NAMES = {"Speed": "速度", "RPM": "回転数", "Temp": "温度"}
 # 記録の種類の表示名（diag.cのdtc_nameと同じ並び、Phase28）
 DTC_NAMES = {"Speed": "速度", "RPM": "回転数", "TempSensor": "温度センサー", "Overheat": "オーバーヒート"}
 MESSAGE_NAMES = {"EngineStatus": "速度・回転数・温度", "FaultStatus": "警告灯", "FanStatus": "ファンの状態"}
+# 試験台で止めるファン係の処理（sim/task_stall.cのTARGET、Phase32）
+STALL_TASK_NAMES = {"FAN_RX_FAULT_STATUS": "ファンを回すかを決める処理", "FAN_RX_ENGINE_STATUS": "温度を受け取る処理"}
+# ファン係が、処理が止まったと判断した・また動き出したと判断したときのログ（fan_ecu.c、Phase32）。
+# 値は（画面に出す文、止まっている見張りの名前、止まったならTrue）
+FAN_STALL_TEXTS = {
+    "[FAN] No decision for too long": ("ファン係：1秒より長く判断していない → ファンを回すかを決める処理が止まっていると判断", "decision", True),
+    "[FAN] Decision resumed": ("ファン係：判断が再開した", "decision", False),
+    "[FAN] No new temp for too long": ("ファン係：新しい温度が4秒より長く届かない → 温度を受け取る処理が止まっていると判断", "temp", True),
+    "[FAN] New temp received again": ("ファン係：新しい温度をまた受け取った", "temp", False),
+}
 START_TEXTS = {
     "[CONFIG] No config file (using defaults)": "設定ファイルが無い → 決めてある値で動く",
     "[CONFIG] Loaded config file": "設定ファイルを読み込んだ",
@@ -283,6 +305,8 @@ def fan_event_text(reason):
         return "温度センサーの異常 → 安全のためファンを回し始めた"
     if reason == "link lost":
         return "連絡を受け取れない → 安全のためファンを回し始めた"
+    if reason in ("decision stale", "temp stale"):
+        return "処理が止まっている → 安全のためファンを回し始めた"   # Phase32
     return "ファンを回し始めた"
 
 
@@ -292,7 +316,8 @@ def parse(lines):
     メーターの値・状態は、前の秒から引き継ぎ、その秒に届いた行で上書きする（実際のメーターと同じく、
     届かない間は最後の値を表示する）。ファンを回している理由は、ファン係の判断（fan_ecu.c）と同じ順番で、
     ファン係が見ている連絡の途切れ → 警告灯の温度ビット → 温度、の順に表示用に読み替える
-    （理由が変わってもファン係はログを出さないため）。"""
+    （理由が変わってもファン係はログを出さないため）。処理が止まっているとファン係が判断している間は、
+    その理由を「処理の停止」とする（Phase32）。"""
     frames, start, records, end = [], [], [], []
     # temp_unknownは、水温センサーの異常の間にメーターが温度を「--」と表示しているか（Phase27）。
     # lampsのoverheatは、警告灯の連絡の高温の通知（Phase27）
@@ -301,6 +326,7 @@ def parse(lines):
              "links": {"EngineStatus": "OK", "FaultStatus": "OK", "FanStatus": "OK"}, "fan": None}
     fan_on = False
     fan_lost = set()
+    fan_stalled = set()   # ファン係が止まっていると判断している処理（"decision"・"temp"、Phase32）
     prev_levels = {}
     frame = None
     phase = "start"
@@ -345,6 +371,7 @@ def parse(lines):
             # ファン係も連絡の途切れの状態を戻す（fan_ecu.cのfan_ecu_is_poweredが受信監視状態の途絶の状態を戻すのと同じ。
             # 戻したときはログが出ないので、ここで消す）
             fan_lost.clear()
+            fan_stalled.clear()   # 止まっているという判断も戻る（fan_ecu_initがtemp_stale・decision_staleを戻す。Phase32）
         elif line == "[IGN] ON -> OFF":
             frame["events"].append("エンジンを切った")
         elif line.startswith("Speed:"):
@@ -408,6 +435,18 @@ def parse(lines):
         elif line == "[FAN] Fan OFF":
             fan_on = False
             frame["events"].append("ファンを止めた")
+        elif line in FAN_STALL_TEXTS:
+            text, which, stalled = FAN_STALL_TEXTS[line]
+            if stalled:
+                fan_stalled.add(which)
+            else:
+                fan_stalled.discard(which)
+            frame["events"].append(text)
+        elif line.startswith("[STALL] FAN_RX_"):
+            # 試験台が処理を止めた・止めるのをやめた瞬間（sim/task_stall.c）
+            name, action = line.split()[1], line.split()[2]
+            frame["events"].append(f"（試験）ファン係の{STALL_TASK_NAMES[name]}が"
+                                   + ("止まった" if action == "stopped" else "動き出した"))
         elif line.startswith("[FAN] "):
             msg = line.split()[1]
             if line.endswith("link lost"):
@@ -421,7 +460,18 @@ def parse(lines):
         # 行を読むたびに、その時点の状態をフレームへ写す（その秒の最後の状態が残る）
         frame["meter"] = json.loads(json.dumps(meter))
         if fan_on:
-            reason = "link lost" if fan_lost else ("temp sensor fault" if meter["lamps"]["temp"] else "temp")
+            # 判断の古さ（decision）は送るときに出力をONにするので、ほかの理由より先に見る。
+            # 水温の古さ（temp）は、fan_ecu.cの判断と同じく、途切れ・温度センサーの異常の次（Phase32）
+            if "decision" in fan_stalled:
+                reason = "stall"
+            elif fan_lost:
+                reason = "link lost"
+            elif meter["lamps"]["temp"]:
+                reason = "temp sensor fault"
+            elif "temp" in fan_stalled:
+                reason = "stall"
+            else:
+                reason = "temp"
         else:
             reason = None
         frame["fan"] = {"on": fan_on, "reason": reason}

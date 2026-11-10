@@ -1,0 +1,41 @@
+# pushとプルリクエストのたびに、手元で行っている確かめ（CLAUDE.mdの確認・検証）を自動で動かす。
+# どれか1つでも失敗したら、そこで止まり、GitHubの画面に失敗として出る。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # make は、実行ファイルを作る前に依存の向き（tools/check_deps.sh）も確かめる。
+      # 警告0件を保つ決まり（gcc -Wall -Wextra -std=c11）なので、警告が1つでも出たら失敗にする。
+      # gccの警告は「ファイル:行:列: warning: …」の形で出るので、「: warning:」を探す
+      # （「warning」だけで探すと、test_..._via_warning のようなテストの名前にも当たる）
+      - name: ビルド（依存の向き・警告0件）
+        run: |
+          make clean
+          make 2>&1 | tee build.log
+          if grep -E ": warning:" build.log; then echo "ビルドで警告が出た"; exit 1; fi
+
+      - name: 単体テスト
+        run: |
+          make test 2>&1 | tee test.log
+          if grep -E ": warning:" test.log; then echo "テストのビルドで警告が出た"; exit 1; fi
+
+      # 実時間の版（sensor_sim）は1回約20秒かかり、全体で約2分15秒かかる
+      - name: シナリオ検証
+        run: make scenario
+
+      # 再生画面（viewer/index.html）のデータを作り直し、コミットされているものと同じかを確かめる。
+      # 違えば、コードを変えたのに再生画面を作り直していない
+      - name: 再生画面のデータが今のコードと合っているか
+        run: |
+          python3 tools/make_viewer_data.py
+          git diff --exit-code viewer/index.html
