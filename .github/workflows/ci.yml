@@ -2,17 +2,26 @@
 # どれか1つでも失敗したら、そこで止まり、GitHubの画面に失敗として出る。
 name: CI
 
+# どのブランチへのpushでも動く（試し用のブランチで確かめてから、mainに取り込めるようにするため）。
+# workflow_dispatchは、GitHubの「Actions」の画面のボタンから手で動かすためのもの
 on:
   push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-and-test:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # シェルを指定しないと、GitHubは bash -e で動かす。この形では、パイプ（|）の途中の命令が失敗しても、
+    # 最後の tee が成功すれば成功扱いになり、make test の失敗を見逃す。shell: bash を指定すると
+    # bash --noprofile --norc -eo pipefail で動かすので、途中の失敗も失敗として伝わる
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      # v4はNode.js 20向けで、GitHubから古いという注意が出たため、Node.js 24向けのv5にした
+      - uses: actions/checkout@v5
 
       # make は、実行ファイルを作る前に依存の向き（tools/check_deps.sh）も確かめる。
       # 警告0件を保つ決まり（gcc -Wall -Wextra -std=c11）なので、警告が1つでも出たら失敗にする。

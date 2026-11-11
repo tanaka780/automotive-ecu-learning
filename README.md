@@ -58,7 +58,7 @@ C言語でパソコン上に再現したプログラム。エンジンの見張�
 
 ### 取り組みの量（2026年11月時点）
 
-- 期間：2026年6月〜（約5か月）。作業の記録（日報）77日分
+- 期間：2026年6月〜（約5か月）。作業の記録（日報）78日分
 - 32の段階に分けて、小さく作っては確かめる、を繰り返した
 - C言語のプログラム約4,000行、テストのプログラム約5,600行
 - 10のシナリオ（車の使われ方の筋書き）を決め、上の表の対応を、自動テストと実際の実行で確かめている
@@ -125,7 +125,7 @@ Phase1〜9はこの完成目標に向けた基礎実装・設計基盤の構築�
 - Compiler: gcc (`-Wall -Wextra -std=c11`)
 - Python 3（シナリオ検証`make scenario`、READMEの図・再生画面のデータ作成用。標準ライブラリのみ使用）
 - Microsoft Edge（Windows側。冒頭の再生画面の画像を撮り直すときだけ使う）
-- GitHub Actions（pushとプルリクエストのたびに、ビルド・テスト・シナリオ検証・再生画面のデータの確かめを自動で動かす）
+- GitHub Actions（どのブランチへのpushでも、プルリクエストのときにも、ビルド・テスト・シナリオ検証・再生画面のデータの確かめを自動で動かす）
 
 ---
 
@@ -159,7 +159,7 @@ make coverage
 make scenario
 ```
 
-GitHubへのpushとプルリクエストのたびに、GitHub Actions（`.github/workflows/ci.yml`）が、ビルド（依存の向き・警告0件）・`make test`・`make scenario`を動かし、再生画面のデータが今のコードと合っているか（作り直して差が無いか）も確かめる。
+GitHubのどのブランチへのpushでも、プルリクエストと、GitHubの画面のボタンから手で動かしたときにも、GitHub Actions（`.github/workflows/ci.yml`）が、ビルド（依存の向き・警告0件）・`make test`・`make scenario`を動かし、再生画面のデータが今のコードと合っているか（作り直して差が無いか）も確かめる。
 
 シナリオ検証のうち、名前に指定した文字列を含むテストだけを実行する（例：`test_runs_to_the_end`。`make scenario`と違い`sensor_sim`・`sensor_sim_virtual`をビルドしないため、先に`make`と`make sensor_sim_virtual`を実行しておく）:
 
