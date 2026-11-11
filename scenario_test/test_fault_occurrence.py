@@ -314,7 +314,7 @@ class OverheatThenSensorFaultTest(unittest.TestCase):
 
     def test_alert_stops_only_while_degraded(self):
         """[ALERT]は、確定中（6〜13サンプル目）だけ止まる。警告はフェイルセーフ値(25)で判断するため。
-        高温のビットは残るので、運転手への知らせとはずれる（READMEの既知の制約）"""
+        高温のビットは残るので、運転手への知らせとはずれる（docs/project_context.mdの既知の制約）"""
         alert_samples = [n for n, lines in self.samples.items()
                          if any(line.startswith("[ALERT]") for line in lines)]
         self.assertEqual(list(range(1, 6)) + list(range(14, 21)), alert_samples)
